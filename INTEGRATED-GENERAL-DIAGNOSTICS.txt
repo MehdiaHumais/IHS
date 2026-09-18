@@ -1,0 +1,7 @@
+General Diagnostics integration
+================================
+- Smart e-Health is included in the general_diagnostics folder.
+- RUN_SMART_CDSS.bat starts General Diagnostics at http://localhost:8501/.
+- SMART CDSS starts at http://localhost:8503/.
+- The General Diagnostics dashboard block opens port 8501.
+- Packages for both applications install only once after successful setup.

@@ -1,0 +1,28 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+python-dotenv>=1.0
+python-dateutil>=2.9
+python-multipart>=0.0.9
+pandas>=2.2
+requests>=2.32
+rapidfuzz>=3.9
+
+# LLM providers / orchestration
+langchain-core>=0.3
+langchain-openai>=0.3
+langchain-groq>=0.2
+langchain-ollama>=0.2
+langchain-google-genai>=2.0
+langchain-mcp-adapters>=0.1
+langgraph>=0.2
+
+# MCP server
+fastmcp>=2.0
+
+# Data layer (Google Sheets)
+gspread>=6.1
+google-auth>=2.30
+
+# Lab report reading
+pymupdf>=1.24

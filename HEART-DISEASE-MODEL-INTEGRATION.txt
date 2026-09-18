@@ -1,0 +1,7 @@
+Heart Disease Diagnosis integration completed.
+
+- Added the supplied HDD cleaned dataset.
+- Integrated the supplied 200-tree Random Forest model directly into Streamlit.
+- Heart Disease Diagnosis is now Ready and opens from both patient and doctor dashboards.
+- Added a complete 13-feature clinical input form, probability, risk category, prediction, and clinical summary.
+- Added scikit-learn to requirements.txt.

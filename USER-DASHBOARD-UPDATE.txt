@@ -1,0 +1,9 @@
+SMART CDSS User Dashboard Update
+
+- Replaced the Settings block with an active User Dashboard.
+- Added editable full name, age, gender, email, date of birth, contact information, and CNIC ID.
+- Unique User ID remains read-only.
+- Added JPG/PNG/WEBP profile-photo upload (maximum 5 MB).
+- Added gender-based default profile images.
+- Added backward-compatible Google Sheets header migration.
+- Existing accounts are preserved; new profile columns are appended automatically.

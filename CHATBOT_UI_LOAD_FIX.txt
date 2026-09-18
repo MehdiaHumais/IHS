@@ -1,0 +1,17 @@
+Clinical Chatbot UI load fix
+
+Problem:
+The Streamlit host treated Google Sheets readiness as a prerequisite for loading
+the chatbot iframe. Therefore a running FastAPI chatbot was hidden whenever
+Google authentication returned invalid_grant / Invalid JWT Signature.
+
+Fix:
+The host now checks only that the expected chatbot server/build is alive before
+embedding its UI. Google Sheets readiness remains reported by /api/health and
+sheet-backed chatbot actions still surface database errors normally.
+
+Important:
+"invalid_grant: Invalid JWT Signature" is a Google credential/key problem. It
+cannot be repaired by application code. Replace the service-account JSON with
+a currently active key for the same service account and ensure the spreadsheet
+is shared with that service account email.

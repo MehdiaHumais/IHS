@@ -1,0 +1,7 @@
+STARTUP FLOW
+
+1. First uploaded photo appears when SMART CDSS starts.
+2. After 3 seconds, the second uploaded photo appears.
+3. A large dark-blue Enter button appears on the right side.
+4. Clicking Enter opens the original SMART CDSS login screen.
+5. Existing login/dashboard/diagnostic logic is otherwise unchanged.

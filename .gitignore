@@ -1,0 +1,42 @@
+# --- Secrets: NEVER commit ---
+service_account.json
+*.env
+.env
+.env.*
+.streamlit/secrets.toml
+
+# --- Virtual environments / caches ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# --- Patient / user data ---
+*.db
+*.sqlite
+*.sqlite3
+general_diagnostics/uploads/
+uploads/
+saved_sentence_bert_model/
+logs/
+
+# --- Editable model artifacts (use Git LFS instead) ---
+*.pkl
+*.joblib
+*.h5
+*.onnx
+
+# --- Misc ---
+.DS_Store
+Thumbs.db
+*.log
+
+# --- Local temp / scratch copies ---
+*.tmp
+*.tmp.*
+*_tmp.*
+appp.py
+requirements_tmp.txt
+requirementss.txt
+check_key.py.py

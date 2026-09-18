@@ -1,0 +1,6 @@
+SMART CDSS update
+
+1. Replaced assets/default-profile-other.jpg with the supplied gender-neutral avatar.
+2. Users whose gender is "Other" and who have no uploaded profile photo now see this avatar.
+3. Corrected sequential user-ID parsing so new accounts receive P-1001, P-1002, P-1003, and so on.
+4. The selected signup gender is retained in the active user session immediately after account creation.

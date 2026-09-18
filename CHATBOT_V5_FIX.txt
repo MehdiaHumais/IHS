@@ -1,0 +1,21 @@
+CHATBOT SERVER CONNECTION V5
+
+Key fix:
+The previous builds used the same chatbot build identifier. If an older FastAPI
+process was still running on port 8000, the main app could reuse that stale server,
+so replacing the ZIP appeared to make no difference.
+
+V5 uses a new build ID and will not reuse old builds.
+
+It also:
+- requires Google Sheets readiness before embedding the chatbot
+- uses the same root google_config.json / service_account.json fallback as registration
+- exposes the safe backend initialization error in the chatbot instead of falsely saying
+  the whole server is unreachable
+- retains appointment worksheet capitalization fixes
+- adds session/patient ownership protection
+- adds symptom_onset and symptom_severity patient fields
+
+Run RUN_APP_CLEAN.bat.
+If Google Sheets itself is unavailable, the main Streamlit page will now show the
+actual safe reason under Technical error instead of opening a broken chatbot iframe.

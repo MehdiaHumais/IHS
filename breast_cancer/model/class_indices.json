@@ -1,0 +1,5 @@
+{
+  "benign": 0,
+  "malignant": 1,
+  "normal": 2
+}

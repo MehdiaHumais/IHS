@@ -1,0 +1,15 @@
+patient_id,name,age,gender,role,specialty,working_hours_start,working_hours_end,allergies,current_medications,medical_history,department
+D001,Dr. Sara Ahmed,42,female,doctor,General Physician,09:00,17:00,,,,
+D002,Dr. Bilal Khan,50,male,doctor,Cardiology,09:00,16:00,,,,
+D003,Dr. Ayesha Malik,38,female,doctor,Neurology,10:00,18:00,,,,
+D004,Dr. Usman Tariq,45,male,doctor,Gastroenterology,09:00,17:00,,,,
+D005,Dr. Hina Farooq,36,female,doctor,Endocrinology,09:00,15:00,,,,
+D006,Dr. Omar Siddiqui,48,male,doctor,Pulmonology,10:00,18:00,,,,
+D007,Dr. Zara Iqbal,33,female,doctor,Dermatology,09:00,17:00,,,,
+D008,Dr. Kamran Aslam,55,male,doctor,Orthopedics,09:00,17:00,,,,
+D009,Dr. Nadia Shah,40,female,doctor,Rheumatology,09:00,16:00,,,,
+D010,Dr. Farhan Qureshi,47,male,doctor,ENT,09:00,17:00,,,,
+D011,Dr. Sana Riaz,39,female,doctor,Infectious Disease,09:00,17:00,,,,
+D012,Dr. Imran Baig,52,male,doctor,General Surgery,08:00,16:00,,,,
+S001,Amna Yousaf,29,female,staff,,,,,,,Front Desk / Scheduling
+S002,Hassan Raza,34,male,staff,,,,,,,Front Desk / Scheduling

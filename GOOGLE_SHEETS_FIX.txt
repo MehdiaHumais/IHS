@@ -1,0 +1,21 @@
+IHS Google Sheets login fix
+
+Fixed:
+- service_account.json was already present.
+- google_config.json was already present and contains a spreadsheet ID.
+- The configured worksheet was "User Registration Responses", which is a Google Form
+  response-style sheet and does not have the authentication schema required by app.py.
+- Authentication now uses a separate worksheet named "Users".
+- app.py will create the "Users" worksheet and its required columns automatically if it
+  does not already exist.
+- The startup message now reports the real Google Sheets error rather than always saying
+  the JSON files are missing.
+
+Important:
+The Google spreadsheet still must be shared with the client_email contained in
+service_account.json, with Editor permission. Google Sheets API and Google Drive API
+must also be enabled for that service-account project.
+
+Run:
+Windows: run_app.bat
+Linux/macOS: ./run_app.sh

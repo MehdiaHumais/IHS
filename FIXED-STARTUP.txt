@@ -1,0 +1,10 @@
+SMART CDSS startup fix
+
+Changes:
+1. The main app now loads the bundled general_diagnostics/agents and
+   general_diagnostics/utils modules directly.
+2. Missing __init__.py package files were added for reliable imports.
+3. The Windows launcher now saves startup logs in the logs folder and
+   prints the last errors instead of waiting silently.
+
+Start the project with RUN_APP.bat or RUN_SMART_CDSS.bat.

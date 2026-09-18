@@ -1,0 +1,10 @@
+IHS CHATBOT
+
+1. Extract the ZIP completely.
+2. Double-click run_App.bat.
+3. On first run it creates .venv and installs all required packages.
+4. When the server is ready, the interface opens automatically in your browser.
+5. Keep the command window open while using the chatbot.
+6. Press Ctrl+C in that window to stop the server.
+
+Python 3.10 or newer and an internet connection are required for first-time package installation.

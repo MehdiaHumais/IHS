@@ -1,0 +1,12 @@
+from PIL import Image
+import streamlit as st
+
+col1, col2 = st.columns([1, 4])
+
+with col1:
+    brain_img = Image.open("brain.png")
+    st.image(brain_img, width=100)
+
+with col2:
+    st.title("🧠 StrokeGuard AI")
+    st.write("AI-powered stroke prediction and medical assistant")

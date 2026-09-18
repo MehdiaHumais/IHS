@@ -1,0 +1,11 @@
+Final white dropdown fix
+========================
+- Added .streamlit/config.toml with a light theme.
+- Styled the complete BaseWeb select container, not only its child.
+- Forced the selected value and arrow to dark text.
+- Forced the opened dropdown menu and options to white.
+- Added the CSS after earlier rules so it takes priority.
+
+After extracting this ZIP, stop the old Streamlit process and start it again.
+Recommended command:
+    streamlit run app.py

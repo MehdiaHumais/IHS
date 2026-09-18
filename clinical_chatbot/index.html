@@ -1,0 +1,2055 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SMART CDSS · Care Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+
+    /* Palette matched to SMART CDSS's main app.py (light blue/indigo/slate
+       theme) instead of the chatbot's previous standalone teal/coral theme.
+       Variable NAMES are kept as-is so nothing downstream needs touching —
+       only the color VALUES changed. */
+    :root {
+      --bg: #f4f7fb;
+      --surface: #FFFFFF;
+      --surface-alt: #f1f5f9;
+      --ink: #0f172a;
+      --ink-soft: #475569;
+      --line: #dbe4f0;
+      --teal: #2563eb;
+      --teal-deep: #1e3a8a;
+      --teal-tint: #dbeafe;
+      --amber: #b45309;
+      --amber-tint: #fef3c7;
+      --coral: #dc2626;
+      --coral-tint: #fee2e2;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #f4f7fb 0%, #eef3ff 100%);
+      color: var(--ink);
+    }
+
+    h1,
+    h2,
+    h3,
+    .display {
+      font-family: 'Manrope', sans-serif;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      transition: border-color .15s, background .15s, box-shadow .15s;
+    }
+
+    .card.selected {
+      border-color: var(--teal);
+      background: #eff6ff;
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+    }
+
+    .bubble-bot {
+      background: var(--surface);
+      border: 1px solid var(--line);
+    }
+
+    .bubble-user {
+      background: var(--teal);
+      color: #fff;
+    }
+
+    .btn-primary {
+      background: var(--teal);
+      color: #fff;
+      transition: background .15s;
+    }
+
+    .btn-primary:hover {
+      background: var(--teal-deep);
+    }
+
+    .btn-primary:disabled {
+      background: var(--line);
+      color: var(--ink-soft);
+      cursor: not-allowed;
+    }
+
+    .btn-ghost {
+      background: var(--surface-alt);
+      color: var(--teal-deep);
+      transition: background .15s;
+    }
+
+    .btn-ghost:hover {
+      background: var(--teal-tint);
+    }
+
+    .btn-ghost:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .tag-teal {
+      background: var(--teal-tint);
+      color: var(--teal-deep);
+    }
+
+    .tag-amber {
+      background: var(--amber-tint);
+      color: var(--amber);
+    }
+
+    .tag-coral {
+      background: var(--coral-tint);
+      color: var(--coral);
+    }
+
+    #doctorTabs button {
+      background: transparent;
+      color: var(--ink-soft);
+    }
+
+    #doctorTabs button.active-tab {
+      background: var(--surface);
+      color: var(--teal-deep);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .08);
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background: var(--line);
+      border-radius: 8px;
+    }
+
+    input,
+    select,
+    textarea {
+      outline: none;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--teal);
+      box-shadow: 0 0 0 3px var(--teal-tint);
+    }
+
+    .fade-in {
+      animation: fadeIn .25s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .typing-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ink-soft);
+      display: inline-block;
+      animation: typingBounce 1.2s infinite ease-in-out;
+    }
+
+    .typing-dot:nth-child(2) {
+      animation-delay: .15s;
+    }
+
+    .typing-dot:nth-child(3) {
+      animation-delay: .3s;
+    }
+
+    @keyframes typingBounce {
+
+      0%,
+      60%,
+      100% {
+        transform: translateY(0);
+        opacity: .4;
+      }
+
+      30% {
+        transform: translateY(-4px);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+
+<body class="h-screen flex flex-col">
+
+  <!-- ============ MAIN APP ============ -->
+  <div id="screen-main" class="hidden flex-1 flex flex-col overflow-hidden">
+    <header class="card px-5 py-3 flex items-center justify-between shadow-sm shrink-0">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:var(--teal-tint);">
+          <i class="fa-solid fa-heart-pulse text-sm" style="color:var(--teal-deep);"></i>
+        </div>
+        <div>
+          <h1 class="text-sm font-bold display leading-none">🧠 SMART CDSS · Care Assistant</h1>
+          <p class="text-xs" style="color:var(--ink-soft);">Symptom Checker · Medication · Appointments</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 text-sm">
+        <!-- Doctor-only tab switcher: hidden entirely for patients -->
+        <div id="doctorTabs" class="hidden items-center gap-1 rounded-lg p-1" style="background:var(--surface-alt);">
+          <button id="tabChatBtn" onclick="switchDoctorView('chat')"
+            class="px-3 py-1.5 rounded-md text-xs font-semibold transition">
+            <i class="fa-solid fa-comment-medical mr-1"></i>Chat
+          </button>
+          <button id="tabScheduleBtn" onclick="switchDoctorView('schedule')"
+            class="px-3 py-1.5 rounded-md text-xs font-semibold transition">
+            <i class="fa-solid fa-calendar-check mr-1"></i>My Schedule
+          </button>
+        </div>
+        <span id="hdrPatientLabel" style="color:var(--ink-soft);">Patient:</span>
+        <b id="hdrPatientName" style="color:var(--ink);"></b>
+      </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden">
+      <!-- DOCTOR SCHEDULE VIEW -->
+      <section id="scheduleView" class="hidden flex-1 flex-col overflow-hidden">
+        <div class="flex-1 overflow-y-auto scrollbar-thin p-6">
+          <div class="max-w-4xl mx-auto">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-base font-bold display">Your appointments</h2>
+              <button onclick="loadDoctorSchedule()" class="btn-ghost rounded-lg px-3 py-1.5 text-xs font-semibold">
+                <i class="fa-solid fa-rotate mr-1"></i>Refresh
+              </button>
+            </div>
+            <div id="scheduleStatus" class="text-sm mb-3" style="color:var(--ink-soft);"></div>
+            <div id="scheduleList" class="space-y-3"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sidebar: patient snapshot -->
+      <aside id="patientSidebar" class="w-72 card border-r p-4 flex-col gap-4 overflow-y-auto scrollbar-thin hidden lg:flex">
+        <h2 class="text-xs font-bold uppercase tracking-wide" style="color:var(--ink-soft);">Profile Snapshot</h2>
+        <div class="rounded-xl p-3" style="background:var(--surface-alt);">
+          <span class="text-xs block mb-1.5" style="color:var(--ink-soft);">Known Allergies</span>
+          <div id="sbAllergies" class="flex flex-wrap gap-1"></div>
+        </div>
+          <div class="rounded-xl p-3" style="background:var(--surface-alt);">
+          <span class="text-xs block mb-1" style="color:var(--ink-soft);">Age / Gender</span>
+          <p id="sbAgeGender" class="text-sm font-medium"></p>
+        </div>
+        <div class="rounded-xl p-3" style="background:var(--surface-alt);">
+          <span class="text-xs block mb-1" style="color:var(--ink-soft);">Symptoms / Visit reason</span>
+          <p id="sbReason" class="text-sm"></p>
+        </div>
+        <div class="rounded-xl p-3" style="background:var(--surface-alt);">
+          <span class="text-xs block mb-1" style="color:var(--ink-soft);">Severity</span>
+          <p id="sbSeverity" class="text-sm"></p>
+        </div>
+        <div class="rounded-xl p-3" style="background:var(--surface-alt);">
+          <span class="text-xs block mb-1" style="color:var(--ink-soft);">Visit category</span>
+          <p id="sbCategory" class="text-sm"></p>
+        </div>
+        <div class="rounded-xl p-3" style="background:var(--surface-alt);">
+          <span class="text-xs block mb-1" style="color:var(--ink-soft);">Visit flags</span>
+          <p id="sbVisitFlags" class="text-sm"></p>
+        </div>
+        <div class="rounded-xl p-3" style="background:var(--surface-alt);">
+          <span class="text-xs block mb-1" style="color:var(--ink-soft);">Current Medications</span>
+          <p id="sbMeds" class="text-sm font-medium"></p>
+        </div>
+        <div class="rounded-xl p-3" style="background:var(--surface-alt);">
+          <span class="text-xs block mb-1" style="color:var(--ink-soft);">Medical History</span>
+          <p id="sbHistory" class="text-sm"></p>
+        </div>
+        <div class="mt-auto rounded-lg p-3 tag-amber text-xs leading-relaxed">
+          <i class="fa-solid fa-triangle-exclamation mr-1"></i> Research prototype — always confirm with a licensed
+          clinician before acting on this output.
+        </div>
+      </aside>
+
+      <!-- CHAT VIEW -->
+      <main id="chatView" class="flex-1 flex flex-col">
+        <div id="chatLog" class="flex-1 overflow-y-auto scrollbar-thin p-6 space-y-4 max-w-3xl w-full mx-auto"></div>
+        <div class="border-t p-4 shrink-0" style="border-color:var(--line);">
+          <div class="max-w-3xl mx-auto flex items-end gap-2">
+            <input type="file" id="labFile" accept="image/*,application/pdf" class="hidden"
+              onchange="submitLabReport()">
+            <button id="attachBtn" onclick="document.getElementById('labFile').click()" title="Upload a lab report"
+              class="btn-ghost rounded-lg w-10 h-10 flex items-center justify-center shrink-0">
+              <i class="fa-solid fa-file-medical"></i>
+            </button>
+            <textarea id="chatInput" rows="1" class="flex-1 border rounded-lg p-2.5 text-sm resize-none"
+              style="border-color:var(--line);" placeholder="Describe how you're feeling…"
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+            <button id="sendBtn" onclick="sendChat()"
+              class="btn-primary rounded-lg w-10 h-10 flex items-center justify-center shrink-0">
+              <i class="fa-solid fa-paper-plane"></i>
+            </button>
+          </div>
+          <p id="inputLockedNote" class="hidden text-xs mt-1.5 text-center" style="color:var(--ink-soft);">Please
+            respond using the buttons above.</p>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ============ INTAKE MODAL ============ -->
+  <div id="intakeModal" class="hidden fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50">
+    <div class="card rounded-2xl p-6 w-full max-w-md shadow-lg">
+      <h2 id="intakeTitle" class="font-bold display mb-1">Quick profile check</h2>
+      <p id="intakeSubtitle" class="text-sm mb-4" style="color:var(--ink-soft);">Just a few questions before we start —
+        this helps the assistant give safer advice.</p>
+      <div id="intakeQuestionWrap"></div>
+      <div class="flex gap-1 mt-4">
+        <div id="intakeProgress" class="flex gap-1"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '';
+    const UI_BUILD = 'fast-start-v9';
+
+    // Agent calls can go through a fallback chain of several LLM providers
+    // server-side, each with its own timeout, so this needs real headroom —
+    // but it must still resolve eventually rather than leaving the "..."
+    // typing indicator on screen forever if every provider is stuck/down.
+    const AGENT_FETCH_TIMEOUT_MS = 120000;
+
+    async function fetchWithTimeout(url, options = {}, timeoutMs = AGENT_FETCH_TIMEOUT_MS) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(url, { ...options, signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    let PATIENT = null;
+    let DOCTOR = null;
+    let IS_DOCTOR = false;
+    let SELECTED_PATIENT = null;
+    let SELECTED_APPOINTMENT = null;
+    let SESSION_ID = null; // server-side conversation session id (sessions.py) — sent on every /agent/chat and /api/intake call
+    let intakeIndex = 0;
+    let intakeQuestions = [];
+    let intakeAnswers = {};
+    let intakeStage = 'profile';
+    let lastRoute = null;
+    // Guards against duplicate concurrent sends (e.g. mashing Enter, or a slow
+    // network causing the person to hit send again before the first reply
+    // lands) — without this, two in-flight /agent/chat calls can each produce
+    // their own assistant reply, which shows up as repeated messages.
+    let sending = false;
+
+    // No login, no "enter your patient ID" step. If the host system passes
+    // ?patient_id=... in the URL, we use that (so embedding elsewhere still
+    // works). Otherwise we mint one automatically and remember it in this
+    // browser via localStorage, so refreshing/re-running resumes the same
+    // patient instead of starting over or asking the person anything.
+    const STORAGE_KEY = 'cdss_patient_id';
+    const ROLE_STORAGE_KEY = 'cdss_role';
+    const DOCTOR_ID_STORAGE_KEY = 'cdss_doctor_id';
+
+    function resolvePatientId() {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get('patient_id');
+      if (fromUrl) {
+        // Explicit patient login overrides any stale doctor mode.
+        if (!params.get('role')) {
+          localStorage.removeItem(ROLE_STORAGE_KEY);
+          localStorage.removeItem(DOCTOR_ID_STORAGE_KEY);
+          localStorage.setItem(STORAGE_KEY, fromUrl);
+        }
+        return fromUrl;
+      }
+
+      if (resolveRole() === 'doctor') {
+        const doctorId = localStorage.getItem(DOCTOR_ID_STORAGE_KEY);
+        if (doctorId) return doctorId;
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) return stored;
+        // Doctor mode is stale or corrupt if no doctor ID is available.
+        localStorage.removeItem(ROLE_STORAGE_KEY);
+        localStorage.removeItem(DOCTOR_ID_STORAGE_KEY);
+      }
+
+      let stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) return stored;
+
+      const generated = 'P' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
+      localStorage.setItem(STORAGE_KEY, generated);
+      return generated;
+    }
+
+    // Doctor mode: the host system (SMART_CDSS) passes ?role=doctor for
+    // doctor accounts, alongside the same ?patient_id=<their real user_id>
+    // used above. Role is remembered in localStorage too, so a refresh
+    // doesn't silently drop a doctor back into patient mode as long as that
+    // browser session is still the same doctor user.
+    function resolveRole() {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get('role');
+      if (fromUrl) {
+        localStorage.setItem(ROLE_STORAGE_KEY, fromUrl);
+        if (fromUrl === 'doctor' && params.get('patient_id')) {
+          localStorage.setItem(DOCTOR_ID_STORAGE_KEY, params.get('patient_id'));
+        } else {
+          localStorage.removeItem(DOCTOR_ID_STORAGE_KEY);
+        }
+        return fromUrl;
+      }
+      // If the page is explicitly opened for a patient_id with no role
+      // override, reset any stale doctor role from earlier browser state.
+      if (params.has('patient_id')) {
+        localStorage.removeItem(ROLE_STORAGE_KEY);
+        localStorage.removeItem(DOCTOR_ID_STORAGE_KEY);
+        return 'patient';
+      }
+      return localStorage.getItem(ROLE_STORAGE_KEY) || 'patient';
+    }
+
+    // Chat history is intentionally NOT persisted to localStorage.
+    // Each time the application starts (or the page is reloaded), the chat
+    // begins fresh. Only the patient_id and the server-side session_id are
+    // stored so the same patient record is resumed without re-running intake.
+    function saveSession() {
+      // No-op: chat history is not persisted between sessions.
+    }
+
+    async function bootstrap() {
+      // Paint the interface immediately.  Previously screen-main stayed
+      // hidden until Google-backed patient initialization completed, so any
+      // slow/failed Sheets request looked like a blank page for minutes.
+      const mainScreen = document.getElementById('screen-main');
+      if (mainScreen) mainScreen.classList.remove('hidden');
+
+      // Guard against a stale iframe/browser cache or an old FastAPI process.
+      // If this page and the backend are from different builds, fail visibly
+      // instead of silently showing an empty schedule from old code.
+      try {
+        const healthRes = await fetchWithTimeout(
+          `${API_BASE}/api/health?_=${Date.now()}`,
+          { cache: 'no-store' },
+          3000
+        );
+        const health = await healthRes.json();
+        if (!healthRes.ok || health.build !== UI_BUILD) {
+          document.getElementById('screen-main').classList.remove('hidden');
+          const status = document.getElementById('scheduleStatus');
+          if (status) {
+            status.textContent = `Version mismatch: UI=${UI_BUILD}, server=${health.build || 'unknown'}. Restart the app from the V8 folder.`;
+          }
+          throw new Error(`CDSS build mismatch: UI=${UI_BUILD}, server=${health.build || 'unknown'}`);
+        }
+      } catch (buildError) {
+        console.error(buildError);
+        // Continue only if the schedule status was not available (patient UI);
+        // patient bootstrap will surface its own connection error.
+        if (resolveRole() === 'doctor') return;
+      }
+
+      const personId = resolvePatientId();
+      // If the host system (e.g. SMART CDSS) passes ?name=... alongside
+      // ?patient_id=..., use it so a brand-new patient record is created
+      // with their real name instead of blank. Only matters the first time
+      // this patient_id is seen — identify() ignores `name` for existing
+      // patients.
+      const nameFromUrl = new URLSearchParams(window.location.search).get('name') || '';
+
+      IS_DOCTOR = resolveRole() === 'doctor';
+      if (IS_DOCTOR) {
+        await bootstrapDoctor(personId, nameFromUrl);
+        return;
+      }
+
+      const patientId = personId;
+      // Always start a fresh session — never pass a stored session_id so the
+      // server creates a new one, clearing any previous conversation history.
+      try {
+        const res = await fetchWithTimeout(`${API_BASE}/api/identify`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patient_id: patientId, name: nameFromUrl })
+        }, 8000);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.patient) {
+          const detail = data.detail || `Patient initialization failed (HTTP ${res.status}).`;
+          console.error("Chatbot identify failed:", res.status, detail);
+          throw new Error(detail);
+        }
+        PATIENT = data.patient;
+        SESSION_ID = data.session_id || null;
+        document.getElementById('screen-main').classList.remove('hidden');
+        document.getElementById('hdrPatientName').textContent = PATIENT.patient_id;
+        renderSnapshot();
+
+        // Always start intake or visit flow fresh — no chat history is restored.
+        if (data.needs_intake) startIntake('profile');
+        else startIntake('visit');
+      } catch (err) {
+        console.error("Chatbot bootstrap error:", err);
+        const message = (err && err.message)
+          ? `The chatbot server is running, but patient records could not be initialized: ${err.message}`
+          : "The chatbot could not initialize patient records. Please refresh and try again.";
+        addBotMessage(message);
+      }
+    }
+
+    // --- DOCTOR MODE ---------------------------------------------------
+    // Doctors get their own identify call (a doctor is never mixed into
+    // the patients sheet — see /api/identify-doctor) and land on "My
+    // Schedule" instead of the patient chat. The generic symptom-checker
+    // chat isn't meaningful for a doctor's own account, so that tab stays
+    // disabled for now rather than reusing the doctor's id as if it were
+    // a patient id (which would also break their doctor-role lookup).
+    async function bootstrapDoctor(doctorId, nameFromUrl) {
+      const params = new URLSearchParams(window.location.search);
+      document.getElementById('screen-main').classList.remove('hidden');
+      document.getElementById('doctorTabs').classList.remove('hidden');
+      document.getElementById('doctorTabs').classList.add('flex');
+      document.getElementById('patientSidebar').classList.remove('hidden');
+      document.getElementById('hdrPatientLabel').textContent = 'Doctor:';
+      const chatTab = document.getElementById('tabChatBtn');
+      chatTab.disabled = true;
+      chatTab.classList.add('opacity-40');
+      chatTab.title = "Chat is available for patient accounts only.";
+      switchDoctorView('schedule');
+
+      try {
+        const res = await fetchWithTimeout(`${API_BASE}/api/identify-doctor`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            doctor_id: doctorId,
+            name: nameFromUrl,
+            specialty: params.get('specialty') || '',
+            working_hours_start: params.get('working_hours_start') || '',
+            working_hours_end: params.get('working_hours_end') || '',
+          })
+        }, 8000);
+        const data = await res.json();
+        if (!res.ok) {
+          document.getElementById('scheduleStatus').textContent =
+            data.detail || "Couldn't verify your doctor account. Please contact support.";
+          return;
+        }
+        DOCTOR = data.doctor;
+        SESSION_ID = data.session_id || null;
+        document.getElementById('hdrPatientName').textContent = DOCTOR.name || DOCTOR.patient_id;
+        loadDoctorSchedule();
+      } catch (err) {
+        document.getElementById('scheduleStatus').textContent =
+          "I couldn't reach the server. Please refresh and try again.";
+      }
+    }
+
+    function switchDoctorView(view) {
+      if (view === 'chat' && IS_DOCTOR) return; // disabled for doctors, see above
+      document.getElementById('tabChatBtn').classList.toggle('active-tab', view === 'chat');
+      document.getElementById('tabScheduleBtn').classList.toggle('active-tab', view === 'schedule');
+      document.getElementById('chatView').classList.toggle('hidden', view !== 'chat');
+      document.getElementById('scheduleView').classList.toggle('hidden', view !== 'schedule');
+      document.getElementById('scheduleView').classList.toggle('flex', view === 'schedule');
+    }
+
+    const STATUS_TAG = {
+      scheduled: 'tag-teal', waitlisted: 'tag-amber', completed: 'tag-teal', cancelled: 'tag-coral',
+    };
+
+    async function loadDoctorSchedule() {
+      const statusEl = document.getElementById('scheduleStatus');
+      const listEl = document.getElementById('scheduleList');
+      statusEl.textContent = 'Loading your schedule…';
+      listEl.innerHTML = '';
+      try {
+        const res = await fetch(
+          `${API_BASE}/api/doctor-schedule?doctor_id=${encodeURIComponent(DOCTOR.patient_id)}&requester_patient_id=${encodeURIComponent(DOCTOR.patient_id)}&_=${Date.now()}`,
+          { cache: 'no-store' }
+        );
+        const data = await res.json();
+        if (!res.ok) {
+          statusEl.textContent = data.detail || "Couldn't load your schedule.";
+          return;
+        }
+        console.info("Doctor schedule loaded", {
+          requestedDoctorId: DOCTOR.patient_id,
+          canonicalDoctorId: data.doctor_id,
+          doctorName: data.doctor_name,
+          appointmentCount: data.appointment_count
+        });
+        const appts = (data.appointments || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        if (!appts.length) {
+          statusEl.textContent = `No appointments assigned to ${DOCTOR.name || DOCTOR.patient_id} yet. [V8]`;
+          return;
+        }
+
+        const seenKey = `cdss_doctor_schedule_seen_${DOCTOR.patient_id}`;
+        const lastSeenRaw = localStorage.getItem(seenKey);
+        const lastSeen = lastSeenRaw ? Date.parse(lastSeenRaw) : 0;
+        const isNewAppointment = (appt) => {
+          const created = Date.parse(appt.created_at || '');
+          return Number.isFinite(created) && created > lastSeen;
+        };
+        const newCount = appts.filter(isNewAppointment).length;
+        statusEl.textContent = newCount
+          ? `${appts.length} appointment(s) · ${newCount} NEW`
+          : `${appts.length} appointment(s)`;
+        // Patient names and details aren't stored on the appointment row itself,
+        // only patient_id — fetch the patient list and each patient's record so
+        // the doctor can see age/gender/reason on every appointment card.
+        let nameById = {};
+        let patientById = {};
+        try {
+          const pRes = await fetch(`${API_BASE}/api/patients`);
+          const pData = await pRes.json();
+          nameById = Object.fromEntries((pData.patients || []).map(p => [p.patient_id, p.name]));
+        } catch (_) { /* names are a nice-to-have; ids still render fine without them */ }
+        const uniquePatientIds = Array.from(new Set(appts.map(a => a.patient_id)));
+        await Promise.all(uniquePatientIds.map(async (patientId) => {
+          try {
+            const res = await fetch(`${API_BASE}/api/patient?patient_id=${encodeURIComponent(patientId)}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.patient) patientById[patientId] = data.patient;
+          } catch (_) {
+            // ignore fetch failures and keep the schedule usable
+          }
+        }));
+        SELECTED_PATIENT = patientById[appts[0]?.patient_id] || null;
+        SELECTED_APPOINTMENT = appts[0] || null;
+        if (SELECTED_PATIENT || SELECTED_APPOINTMENT) renderSnapshot(SELECTED_PATIENT, SELECTED_APPOINTMENT);
+
+        const appointmentCards = [];
+        for (const appt of appts) {
+          const tagClass = STATUS_TAG[appt.status] || 'tag-teal';
+          const patient = patientById[appt.patient_id] || {};
+          const patientLabel = nameById[appt.patient_id] || appt.patient_id;
+          const patientMeta = [patient.age ? `${e(patient.age)}y` : '', patient.gender ? e(patient.gender) : '']
+            .filter(Boolean).join(' / ');
+          const symptomText = appt.reason || patient.visit_reason || '';
+        const severityText = patient.symptom_severity || patient.severity || '';
+        const visitFlags = [];
+        if (String(patient.needs_medical_note || '').toLowerCase() === 'yes') visitFlags.push('Medical note');
+        if (String(patient.needs_prescription_renewal || '').toLowerCase() === 'yes') visitFlags.push('Prescription renewal');
+          const card = document.createElement('div');
+          card.className = 'card rounded-xl p-4';
+          card.innerHTML = `
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="font-semibold text-sm">${e(patientLabel)}</p>
+                <p class="text-xs mt-0.5" style="color:var(--ink-soft);">
+                  ${e(appt.date || '')} · ${e(appt.specialist || '')} · ${e(appt.consultation_mode || 'in-clinic')}
+                </p>
+                ${patientMeta ? `<p class="text-xs mt-1" style="color:var(--ink-soft);">${e(patientMeta)}</p>` : ''}
+                ${severityText ? `<p class="text-xs mt-1" style="color:var(--ink-soft);">Severity: ${e(severityText)}</p>` : ''}
+                ${symptomText ? `<p class="text-xs mt-1" style="color:var(--ink-soft);">Reason: ${e(symptomText)}</p>` : ''}
+                ${visitFlags.length ? `<p class="text-xs mt-1" style="color:var(--ink-soft);">${e(visitFlags.join(' · '))}</p>` : ''}
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                ${isNewAppointment(appt) ? '<span class="px-2 py-0.5 rounded text-xs font-semibold tag-amber">NEW</span>' : ''}
+                <span class="px-2 py-0.5 rounded text-xs font-semibold ${tagClass}">${e(appt.status || '')}</span>
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2 mt-3"></div>
+          `;
+          const actions = card.querySelector('div.flex.gap-2.mt-3');
+          const viewBtn = document.createElement('button');
+          viewBtn.className = 'btn-ghost rounded-lg px-3 py-1.5 text-xs font-semibold';
+          viewBtn.textContent = 'View patient';
+          viewBtn.onclick = () => {
+            SELECTED_PATIENT = patient || null;
+            SELECTED_APPOINTMENT = appt;
+            document.querySelectorAll('#scheduleList .card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            renderSnapshot(SELECTED_PATIENT, SELECTED_APPOINTMENT);
+          };
+          actions.appendChild(viewBtn);
+          if (SELECTED_APPOINTMENT && SELECTED_APPOINTMENT.appointment_id === appt.appointment_id) {
+            card.classList.add('selected');
+          }
+          if (appt.status === 'scheduled' || appt.status === 'waitlisted') {
+            const doneBtn = document.createElement('button');
+            doneBtn.className = 'btn-primary rounded-lg px-3 py-1.5 text-xs font-semibold';
+            doneBtn.textContent = 'Mark done';
+            doneBtn.onclick = () => updateAppointmentStatus(appt, 'completed');
+            actions.appendChild(doneBtn);
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'btn-ghost rounded-lg px-3 py-1.5 text-xs font-semibold';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.onclick = () => updateAppointmentStatus(appt, 'cancelled');
+            actions.appendChild(cancelBtn);
+          }
+          listEl.appendChild(card);
+        }
+        localStorage.setItem(seenKey, new Date().toISOString());
+      } catch (err) {
+        statusEl.textContent = "I couldn't reach the server. Please refresh and try again.";
+      }
+    }
+
+    async function updateAppointmentStatus(appt, newStatus) {
+      try {
+        const res = await fetch(`${API_BASE}/agent/appointment`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_id: appt.patient_id,
+            requester_patient_id: DOCTOR.patient_id,
+            action: 'update',
+            user_input: `mark appointment ${appt.appointment_id} as ${newStatus}`,
+            appointment_id: appt.appointment_id,
+            updates: { status: newStatus },
+          })
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert(data.detail || 'Could not update that appointment.');
+          return;
+        }
+        loadDoctorSchedule();
+      } catch (err) {
+        alert("I couldn't reach the server. Please try again.");
+      }
+    }
+
+    function renderSnapshot(patient = PATIENT, appointment = null) {
+      const target = patient || {};
+      const appointmentReason = appointment?.reason || '';
+      const allergyBox = document.getElementById('sbAllergies');
+      allergyBox.innerHTML = '';
+      const allergies = target.allergies || [];
+      if (!allergies.length) allergyBox.innerHTML = '<span class="text-xs" style="color:var(--ink-soft);">None on record</span>';
+      for (const a of allergies) {
+        const s = document.createElement('span');
+        s.className = 'px-2 py-0.5 tag-coral rounded text-xs font-medium';
+        s.textContent = a;
+        allergyBox.appendChild(s);
+      }
+      document.getElementById('sbAgeGender').textContent = [target.age || '', target.gender || ''].filter(Boolean).join(' / ') || 'None on record';
+      document.getElementById('sbReason').textContent = target.visit_reason || target.reason || appointmentReason || 'None on record';
+      document.getElementById('sbSeverity').textContent = target.symptom_severity || target.severity || 'None on record';
+      document.getElementById('sbCategory').textContent = target.visit_category || 'None on record';
+      const flags = [];
+      if (String(target.needs_medical_note || '').toLowerCase() === 'yes') flags.push('Medical note');
+      if (String(target.needs_prescription_renewal || '').toLowerCase() === 'yes') flags.push('Prescription renewal');
+      document.getElementById('sbVisitFlags').textContent = flags.join(', ') || 'None on record';
+      document.getElementById('sbMeds').textContent = (target.current_medications || []).join(', ') || 'None on record';
+      document.getElementById('sbHistory').textContent = (target.medical_history || []).join(', ') || 'None on record';
+    }
+
+    // --- INTAKE (with Yes/No gating: a gated question is skipped unless its
+    // depends_on answer matches) ---
+    async function startIntake(stage) {
+      intakeStage = stage;
+      document.getElementById('intakeTitle').textContent = stage === 'profile' ? 'Quick profile check' : "Today's visit";
+      document.getElementById('intakeSubtitle').textContent = stage === 'profile'
+        ? 'Just a few questions before we start — this helps the assistant give safer advice.'
+        : "A couple of quick questions about what brings you in today.";
+      const qs = SESSION_ID ? `stage=${stage}&session_id=${encodeURIComponent(SESSION_ID)}` : `stage=${stage}`;
+      const res = await fetch(`${API_BASE}/api/intake-questions?${qs}`);
+      const data = await res.json();
+      intakeQuestions = data.questions;
+      intakeIndex = -1; intakeAnswers = {};
+      document.getElementById('intakeModal').classList.remove('hidden');
+      advanceIntake();
+    }
+
+    function isGatedOut(q) {
+      if (!q.depends_on) return false;
+      return intakeAnswers[q.depends_on.id] !== q.depends_on.equals;
+    }
+
+    function advanceIntake() {
+      intakeIndex++;
+      while (intakeIndex < intakeQuestions.length && isGatedOut(intakeQuestions[intakeIndex])) {
+        intakeIndex++;
+      }
+      if (intakeIndex >= intakeQuestions.length) { finishIntake(); return; }
+      renderIntakeQuestion();
+    }
+
+    function renderIntakeQuestion() {
+      const q = intakeQuestions[intakeIndex];
+      const wrap = document.getElementById('intakeQuestionWrap');
+
+      if (q.type === 'select' || q.type === 'yesno') {
+        const options = q.type === 'yesno' ? ['Yes', 'No'] : q.options;
+        let html = `<p class="text-sm font-medium mb-2">${q.question}</p><div class="space-y-2 mb-4">`;
+        options.forEach((opt, i) => {
+          html += `<label class="flex items-center gap-2 border rounded-lg p-2.5 text-sm cursor-pointer" style="border-color:var(--line);">
+        <input type="radio" name="intakeOpt" value="${opt.replace(/"/g, '&quot;')}" ${i === 0 ? 'checked' : ''}> ${opt}
+      </label>`;
+        });
+        html += '</div><button onclick="submitIntakeAnswer()" class="btn-primary w-full rounded-lg py-2.5 text-sm font-semibold">Next</button>';
+        wrap.innerHTML = html;
+      } else {
+        wrap.innerHTML = `
+      <p class="text-sm font-medium mb-2">${q.question}</p>
+      <input id="intakeAnswerInput" class="w-full border rounded-lg p-2.5 text-sm mb-4" style="border-color:var(--line);">
+      <button onclick="submitIntakeAnswer()" class="btn-primary w-full rounded-lg py-2.5 text-sm font-semibold">Next</button>`;
+      }
+
+      const progress = document.getElementById('intakeProgress');
+      progress.innerHTML = '';
+      intakeQuestions.forEach((_, i) => {
+        const dot = document.createElement('div');
+        dot.className = 'h-1.5 flex-1 rounded-full';
+        dot.style.background = i <= intakeIndex ? 'var(--teal)' : 'var(--line)';
+        progress.appendChild(dot);
+      });
+    }
+
+    async function submitIntakeAnswer() {
+      const q = intakeQuestions[intakeIndex];
+      let val;
+      if (q.type === 'select' || q.type === 'yesno') {
+        const checked = document.querySelector('input[name="intakeOpt"]:checked');
+        val = checked ? checked.value : '';
+      } else {
+        val = document.getElementById('intakeAnswerInput').value.trim();
+      }
+      intakeAnswers[q.id] = val;
+
+      const isLastQuestion = intakeIndex >= intakeQuestions.length - 1
+        || !intakeQuestions.slice(intakeIndex + 1).some(qq => !isGatedOut(qq));
+      if (isLastQuestion) {
+        // finishIntake() makes real network calls (save answers, then
+        // re-fetch the patient) before the modal closes — show that it's
+        // working instead of leaving the button looking unresponsive.
+        const btn = document.querySelector('#intakeQuestionWrap button');
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+        }
+      }
+      advanceIntake();
+    }
+
+    async function finishIntake() {
+      try {
+        await fetch(`${API_BASE}/api/intake`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patient_id: PATIENT.patient_id, answers: intakeAnswers, stage: intakeStage, session_id: SESSION_ID || undefined })
+        });
+        document.getElementById('intakeModal').classList.add('hidden');
+        const refreshed = await fetch(`${API_BASE}/api/identify`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patient_id: PATIENT.patient_id })
+        });
+        const data = await refreshed.json();
+        PATIENT = data.patient;
+        renderSnapshot();
+      } catch (err) {
+        const btn = document.querySelector('#intakeQuestionWrap button');
+        if (btn) { btn.disabled = false; btn.textContent = 'Next'; }
+        addBotMessage("I couldn't save that just now — please try Next again.", 'Error');
+        return;
+      }
+
+      if (intakeStage === 'profile') {
+        // Profile is one-time and now done — immediately follow with today's
+        // visit questions before opening the chat.
+        startIntake('visit');
+        return;
+      }
+
+      // The patient just told us why they're here (visit_reason) — don't
+      // throw that away and ask them to repeat it.
+      const reason = (intakeAnswers.visit_reason || '').trim();
+      const category = intakeAnswers.visit_category || '';
+      const needsNote = intakeAnswers.needs_medical_note === 'Yes';
+      const needsRenewal = intakeAnswers.needs_prescription_renewal === 'Yes';
+
+      // If the patient described anything real (a symptom, or their own words
+      // for why they're here), that always goes through the symptom checker
+      // first — needs_medical_note/needs_prescription_renewal are already
+      // folded into its prompt server-side, so it has both signals at once
+      // instead of us guessing here and silently dropping one of them. Only
+      // when there's NO free-text reason at all do we skip straight to
+      // booking, since there's nothing else to discuss in that case.
+      if (reason) {
+        addBotMessage('What are your symptoms?');
+        addUserMessage(reason);
+        // If the patient also flagged a note or renewal need, acknowledge it
+        // now so they know it hasn't been forgotten. The backend will include
+        // it in the appointment reason when they book.
+        if (needsNote || needsRenewal) {
+          const what = needsNote && needsRenewal
+            ? 'a prescription renewal and a medical note'
+            : (needsNote ? 'a medical note' : 'a prescription renewal');
+          addBotMessage(`Also noted — you mentioned you need ${what}. I'll include that when we schedule your appointment.`);
+        }
+        showTyping();
+        try {
+          const res = await fetchWithTimeout(`${API_BASE}/agent/chat`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ patient_id: PATIENT.patient_id, message: reason, session_id: SESSION_ID || undefined })
+          });
+          hideTyping();
+          handleChatResponse(await res.json(), reason, 0, reason);
+        } catch (err) {
+          hideTyping();
+          addBotMessage("I couldn't reach the server. Please try again.", 'Error');
+        }
+        return;
+      }
+
+      if (needsNote || needsRenewal) {
+        const what = needsNote && needsRenewal
+          ? 'a prescription renewal and a medical note'
+          : (needsNote ? 'a medical note' : 'a prescription renewal');
+        addBotMessage(`Got it — you need ${what}. Let's get that scheduled with a doctor.`);
+        addDatePickerMessage('General Physician');
+        return;
+      }
+      addBotMessage(`Thanks — noted (${reason || category || 'your visit'}). How can I help — tell me what's going on, or upload a lab report.`);
+      saveSession();
+    }
+
+    // --- INPUT LOCKING (prevents the free-text fallthrough bug: while a
+    // button/widget step is pending, typing is disabled so the only way
+    // forward is the widget itself) ---
+    function lockInput() {
+      document.getElementById('chatInput').disabled = true;
+      document.getElementById('sendBtn').disabled = true;
+      document.getElementById('attachBtn').disabled = true;
+      document.getElementById('inputLockedNote').classList.remove('hidden');
+    }
+    function unlockInput() {
+      document.getElementById('chatInput').disabled = false;
+      document.getElementById('sendBtn').disabled = false;
+      document.getElementById('attachBtn').disabled = false;
+      document.getElementById('inputLockedNote').classList.add('hidden');
+      document.getElementById('chatInput').focus();
+    }
+
+    // --- TYPING INDICATOR ---
+    function showTyping() {
+      const log = document.getElementById('chatLog');
+      const div = document.createElement('div');
+      div.id = 'typingIndicator';
+      div.className = 'fade-in flex justify-start';
+      div.innerHTML = `<div class="bubble-bot rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>`;
+      log.appendChild(div); log.scrollTop = log.scrollHeight;
+    }
+    function hideTyping() {
+      const el = document.getElementById('typingIndicator');
+      if (el) el.remove();
+    }
+
+    // --- MESSAGE RENDERING ---
+    function addUserMessage(text) {
+      const log = document.getElementById('chatLog');
+      const div = document.createElement('div');
+      div.className = 'fade-in flex justify-end';
+      div.innerHTML = `<div class="bubble-user rounded-2xl rounded-br-sm px-4 py-2.5 text-sm max-w-lg whitespace-pre-wrap">${escapeHtml(text)}</div>`;
+      log.appendChild(div); log.scrollTop = log.scrollHeight;
+    }
+
+    function addBotMessage(text, tag) {
+      const log = document.getElementById('chatLog');
+      const div = document.createElement('div');
+      div.className = 'fade-in flex justify-start';
+      const tagHtml = tag ? `<span class="inline-block mb-1.5 px-2 py-0.5 tag-teal rounded text-xs font-semibold">${tag}</span><br>` : '';
+      div.innerHTML = `<div class="bubble-bot rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm max-w-lg whitespace-pre-wrap shadow-sm">${tagHtml}${escapeHtml(text)}</div>`;
+      log.appendChild(div); log.scrollTop = log.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+      const d = document.createElement('div'); d.textContent = str; return d.innerHTML;
+    }
+
+    function addCardMessage(html, tag) {
+      const log = document.getElementById('chatLog');
+      const div = document.createElement('div');
+      div.className = 'fade-in flex justify-start';
+      const tagHtml = tag ? `<span class="inline-block mb-1.5 px-2 py-0.5 tag-teal rounded text-xs font-semibold">${tag}</span>` : '';
+      div.innerHTML = `<div class="bubble-bot rounded-2xl rounded-bl-sm px-4 py-3 text-sm max-w-lg shadow-sm space-y-2">${tagHtml}${html}</div>`;
+      log.appendChild(div); log.scrollTop = log.scrollHeight;
+      return div;
+    }
+    const e = escapeHtml;
+
+    const SEVERITY_TAG_CLASS = { mild: 'tag-teal', urgent: 'tag-amber', emergency: 'tag-coral' };
+    const SEVERITY_LABEL = { mild: 'Mild', urgent: 'Urgent', emergency: 'Emergency' };
+
+    // Renders the symptom-checker's own assessment (no differential/disease
+    // names by design — severity + plain-language summary + self-care +
+    // warning signs). General guidance always renders regardless of whether a
+    // clarifying question is also pending — the question (if any) is rendered
+    // separately, after this and after any OTC guidance, never in place of it.
+    function buildAssessmentSection(out) {
+      const sev = (out.severity || '').toLowerCase();
+      const sevClass = SEVERITY_TAG_CLASS[sev] || 'tag-teal';
+      let html = '<div>';
+      if (sev) html += `<span class="inline-block px-2 py-0.5 ${sevClass} rounded text-xs font-semibold mb-1.5">${e(SEVERITY_LABEL[sev] || out.severity)}</span>`;
+      if (out.assessment_summary) html += `<p class="text-sm">${e(out.assessment_summary)}</p>`;
+      const selfCare = out.self_care_advice || [];
+      if (selfCare.length) {
+        html += '<div class="mt-2"><p class="text-xs font-semibold mb-1" style="color:var(--ink-soft);">What you can do</p><ul class="text-sm space-y-0.5">';
+        for (const step of selfCare) html += `<li>• ${e(step)}</li>`;
+        html += '</ul></div>';
+      }
+      const warnings = out.warning_signs || [];
+      if (warnings.length) {
+        html += '<div class="tag-coral rounded-lg p-2 text-sm mt-2"><b>Seek care sooner if you notice:</b><ul>';
+        for (const w of warnings) html += `<li>• ${e(w)}</li>`;
+        html += '</ul></div>';
+      }
+      return html + '</div>';
+    }
+
+
+    function buildMedicationCard(med) {
+      if (med.error) return `<div class="tag-coral rounded-lg p-2 text-sm">${e(med.error)}</div>`;
+      let html = '';
+      const suggestions = med.otc_suggestions || [];
+      const selfCare = med.self_care || [];
+
+      // Self-care steps (rest, hydration, home remedies etc.)
+      if (selfCare.length) {
+        html += '<div class="mb-2"><p class="text-xs font-semibold mb-1" style="color:var(--ink-soft);">Self-care steps</p><ul class="space-y-0.5">';
+        for (const s of selfCare) html += `<li class="text-sm">• ${e(s)}</li>`;
+        html += '</ul></div>';
+      }
+
+      if (med.escalate) {
+        const label = suggestions.length ? 'One suggestion was withheld — clinical review recommended' : 'No OTC suggestions — this warrants clinical review rather than self-care alone';
+        html += `<div class="tag-coral rounded-lg p-2 text-sm">${label}${med.escalation_reason ? ': ' + e(med.escalation_reason) : '.'}</div>`;
+      } else if (suggestions.length) {
+        html += '<div><p class="text-xs font-semibold mb-1" style="color:var(--ink-soft);">Over-the-counter options (if appropriate)</p><ul class="space-y-1">';
+        for (const s of suggestions) {
+          html += `<li class="text-sm"><span class="font-medium">${e(s.option)}</span>${s.note ? ` — <span style="color:var(--ink-soft);">${e(s.note)}</span>` : ''}</li>`;
+        }
+        html += '</ul></div>';
+      } else if (med.otc_appropriate === false) {
+        html += `<p class="text-sm" style="color:var(--ink-soft);">OTC medication isn't recommended for this — self-care steps above are the main approach for now.</p>`;
+      } else if (!selfCare.length) {
+        // Neither self-care nor OTC — show a neutral fallback so the card isn't empty
+        html += `<p class="text-sm" style="color:var(--ink-soft);">No specific OTC suggestions for this complaint — follow the general self-care advice in the assessment above.</p>`;
+      }
+
+      const warnings = med.interaction_warnings || [];
+      if (warnings.length) {
+        html += '<div class="tag-amber rounded-lg p-2 text-sm mt-2"><b>Interaction warnings:</b><ul>';
+        for (const w of warnings) html += `<li>• ${e(w)}</li>`;
+        html += '</ul></div>';
+      }
+
+      // Red flags from the medication agent (separate from assessment warning_signs)
+      const redFlags = med.red_flags || [];
+      if (redFlags.length) {
+        html += '<div class="tag-coral rounded-lg p-2 text-sm mt-2"><b>Seek care if you notice:</b><ul>';
+        for (const f of redFlags) html += `<li>• ${e(f)}</li>`;
+        html += '</ul></div>';
+      }
+
+      return html;
+    }
+
+    function buildAppointmentCard(appt) {
+      if (appt.error) return `<div class="tag-coral rounded-lg p-2 text-sm">${e(appt.error)}</div>`;
+      if (appt.authorized === false) return `<div class="tag-coral rounded-lg p-2 text-sm">${e(appt.message || 'Request denied.')}</div>`;
+      const status = appt.status;
+      if (status === 'created' || status === 'already_exists') {
+        const d = appt.details || {};
+        const label = status === 'created' ? 'Appointment booked' : 'Appointment already exists';
+        const modeIcons = { video: 'fa-video', phone: 'fa-phone', 'in-clinic': 'fa-hospital' };
+        const modeLabels = { video: 'Video call', phone: 'Phone call', 'in-clinic': 'In-clinic' };
+        const mode = d.consultation_mode || '';
+        const dateLabel = d.date ? new Date(d.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+        const patientInfo = [PATIENT?.age ? `${e(PATIENT.age)} y` : '', PATIENT?.gender ? e(PATIENT.gender) : '']
+          .filter(Boolean).join(', ');
+        const symptomText = d.reason || PATIENT?.visit_reason || '';
+        let html = `<div class="tag-teal rounded-lg p-3 text-sm space-y-1">
+      <p class="font-semibold flex items-center gap-1.5"><i class="fa-solid fa-circle-check"></i> ${label}</p>
+      <p><i class="fa-solid fa-user-doctor w-4 inline-block" style="color:var(--ink-soft);"></i> ${e(d.assigned_doctor || d.specialist || '')} <span style="color:var(--ink-soft);">(${e(d.specialist || '')})</span></p>
+      ${patientInfo ? `<p><i class="fa-solid fa-user w-4 inline-block" style="color:var(--ink-soft);"></i> ${patientInfo}</p>` : ''}
+      <p><i class="fa-solid fa-calendar w-4 inline-block" style="color:var(--ink-soft);"></i> ${e(dateLabel || d.date || '')}</p>`;
+        if (symptomText) {
+          html += `<p class="text-xs" style="color:var(--ink-soft);"><i class="fa-solid fa-notes-medical w-4 inline-block"></i> ${e(symptomText)}</p>`;
+        }
+        html += `<p class="text-xs" style="color:var(--ink-soft);">Saved to your patient record.</p>`;
+        if (mode) {
+          html += `<p><i class="fa-solid ${modeIcons[mode] || 'fa-comments'} w-4 inline-block" style="color:var(--ink-soft);"></i> ${e(modeLabels[mode] || mode)}${d.contact_phone ? ` — ${e(d.contact_phone)}` : ''}</p>`;
+        }
+        html += `<p style="color:var(--ink-soft);"><i class="fa-solid fa-hashtag w-4 inline-block"></i> ${e(d.appointment_id || '')}</p>
+    </div>`;
+        return html;
+      }
+      if (status === 'updated') {
+        return `<div class="tag-teal rounded-lg p-2 text-sm"><i class="fa-solid fa-circle-check mr-1"></i> Appointment updated successfully.</div>`;
+      }
+      if (status === 'cancelled') {
+        return `<div class="tag-teal rounded-lg p-2 text-sm"><i class="fa-solid fa-circle-check mr-1"></i> Appointment cancelled.</div>`;
+      }
+      if (status === 'no_availability') {
+        const slots = appt.suggested_slots || [];
+        let html = `<div class="tag-coral rounded-lg p-2 text-sm mb-2">${e(appt.message || 'No availability at that time.')}</div>`;
+        if (slots.length) {
+          html += '<p class="text-xs font-semibold mb-1" style="color:var(--ink-soft);">Quick-pick a real open slot:</p>';
+          html += '<div class="flex flex-col gap-1.5">';
+          for (const s of slots) {
+            const label = new Date(s.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+            html += `<button onclick="pickSuggestedSlot('${e(s.date)}', '${e((appt.specialist || '')).replace(/'/g, "\\'")}', '${e((s.doctor_id || '')).replace(/'/g, "\\'")}', this)" class="btn-ghost text-xs font-medium px-3 py-1.5 rounded-lg text-left">${e(label)} — Dr. ${e(s.doctor_name || '')}</button>`;
+          }
+          html += '</div>';
+        }
+        return html;
+      }
+      if (status === 'lookup_completed') {
+        const appts = appt.appointments || [];
+        if (!appts.length) return `<p class="text-sm" style="color:var(--ink-soft);">No appointments found.</p>`;
+        let html = '<ul class="space-y-1 text-sm">';
+        for (const a of appts) html += `<li>• ${e(a.date)} — ${e(a.specialist)} <span class="tag-teal rounded px-1.5 py-0.5 text-xs">${e(a.status)}</span></li>`;
+        return html + '</ul>';
+      }
+      if (status === 'not_found') {
+        return `<div class="tag-coral rounded-lg p-2 text-sm">Appointment not found. Please check the ID and try again.</div>`;
+      }
+      // Fallback for any unexpected shape — show a message if we have one,
+      // or a generic 'done' if the status is something we just don't know yet.
+      if (appt.message || appt.display_text || status) {
+        return `<p class="text-sm">${e(appt.message || appt.display_text || status || 'Done.')}</p>`;
+      }
+      // Only hit if the response has no status, no message, and no authorized:false —
+      // this was the old "Something went wrong" false positive.
+      return `<div class="tag-coral rounded-lg p-2 text-sm">Something went wrong processing that appointment. Please try again.</div>`;
+    }
+
+    function buildLabReportCard(lab) {
+      let html = `<p class="text-sm">${e(lab.summary || '')}</p>`;
+      const tests = lab.tests || [];
+      if (tests.length) {
+        html += '<ul class="space-y-1.5">';
+        for (const t of tests) {
+          const flagTag = t.flag === 'normal' ? 'tag-teal' : (t.flag === 'unclear' ? 'tag-amber' : 'tag-coral');
+          const flagLabel = { normal: 'normal', high: 'high', low: 'low', unclear: '?' }[t.flag] || t.flag;
+          html += `<li class="text-sm"><span class="font-medium">${e(t.name)}</span>: ${e(t.value)} <span class="px-1.5 py-0.5 ${flagTag} rounded text-xs">${e(flagLabel)}</span><br><span style="color:var(--ink-soft);">${e(t.explanation || '')}</span></li>`;
+        }
+        html += '</ul>';
+      }
+      if ((lab.flagged_for_doctor || []).length) {
+        html += '<div class="tag-amber rounded-lg p-2 text-sm"><b>Discuss with your doctor:</b><ul>';
+        for (const f of lab.flagged_for_doctor) html += `<li>• ${e(f)}</li>`;
+        html += '</ul></div>';
+      }
+      return html;
+    }
+
+    // --- APPOINTMENT WIDGETS (real picker + real buttons, both lock input
+    // until used, so free text can never fall through mid-flow) ---
+    //
+    // Each step keeps window._pendingBooking updated with everything chosen so
+    // far (specialist, isoDate, mode, contactPhone) and every step offers a way
+    // back to the previous one, so changing an earlier choice (date, specialist,
+    // consultation mode) edits that same in-progress booking instead of forcing
+    // the whole flow to restart from the initial appointment offer.
+    async function addDatePickerMessage(specialist, prefillIso) {
+      lockInput();
+      // 'min' stops the browser picker itself from offering past dates/times.
+      const nowLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      const prefill = prefillIso ? prefillIso.slice(0, 16) : '';
+
+      // The specialist control is sourced directly from doctor accounts
+      // registered in SMART CDSS's Google Sheet.
+      let doctors = [];
+      try {
+        const res = await fetch(`${API_BASE}/api/doctors`);
+        if (res.ok) {
+          const data = await res.json();
+          doctors = data.doctors || [];
+        }
+      } catch (_) {
+        doctors = [];
+      }
+
+      let specialistControl = '';
+      if (doctors.length) {
+        let selectedIndex = doctors.findIndex(d =>
+          (d.patient_id || '').toLowerCase() === (specialist || '').toLowerCase() ||
+          (d.name || '').toLowerCase() === (specialist || '').toLowerCase() ||
+          (d.specialty || '').toLowerCase() === (specialist || '').toLowerCase()
+        );
+        if (selectedIndex < 0) selectedIndex = 0;
+
+        const options = doctors.map((d, i) => {
+          const name = d.name || d.patient_id;
+          const label = d.specialty ? `${name} (${d.specialty})` : name;
+          return `<option value="${e(d.patient_id)}" data-doctor-name="${e(name)}" data-specialty="${e(d.specialty || '')}"${i === selectedIndex ? ' selected' : ''}>${e(label)}</option>`;
+        }).join('');
+        specialistControl = `<select class="appt-specialist-input w-full border rounded-lg p-2 text-sm mb-2" style="border-color:var(--line);">${options}</select>`;
+      } else {
+        // Keep the booking screen usable if Google Sheets is temporarily
+        // unreachable; this fallback is only used when no registered roster
+        // can be loaded.
+        specialistControl = `<input type="text" class="appt-specialist-input w-full border rounded-lg p-2 text-sm mb-2" value="${e(specialist || '')}" style="border-color:var(--line);">`;
+      }
+
+      addCardMessage(`
+    <p class="text-sm mb-1">Specialist:</p>
+    ${specialistControl}
+    <p class="text-sm mb-1">Pick a date and time:</p>
+    <input type="datetime-local" class="appt-date-input w-full border rounded-lg p-2 text-sm mb-2" min="${nowLocal}" value="${e(prefill)}" style="border-color:var(--line);">
+    <p class="appt-date-error text-xs mb-2 hidden" style="color:var(--coral, #d9534f);"></p>
+    <button onclick="confirmAppointmentDate(this)" class="btn-primary text-xs font-semibold px-3 py-1.5 rounded-lg w-full">Continue</button>
+  `, 'Appointment');
+      saveSession();
+    }
+
+    // NOTE: these cards can be re-rendered multiple times in the same chat log
+    // (the "Change date/specialist" and "Change consultation mode" links each
+    // append a fresh copy rather than replacing the old one), so every lookup
+    // below is scoped to THIS card via btnEl.closest('.space-y-2') instead of
+    // document.getElementById/global selectors — global IDs/names collide with
+    // the earlier (now-disabled) copies still sitting in the DOM, which is why
+    // "Change date/specialist" and "Change consultation mode" used to silently
+    // read stale values from the old card instead of the new one.
+    function confirmAppointmentDate(btnEl) {
+      const card = btnEl.closest('.space-y-2');
+      const specialistInput = card.querySelector('.appt-specialist-input');
+      const input = card.querySelector('.appt-date-input');
+      const errorEl = card.querySelector('.appt-date-error');
+      const showError = (msg) => { errorEl.textContent = msg; errorEl.classList.remove('hidden'); };
+
+      const rawSelection = (specialistInput.value || '').trim();
+      if (!rawSelection) { showError('Please select a doctor.'); specialistInput.focus(); return; }
+      const selectedOption = specialistInput.tagName === 'SELECT'
+        ? specialistInput.options[specialistInput.selectedIndex] : null;
+      const doctorId = selectedOption ? rawSelection : null;
+      const doctorName = selectedOption ? (selectedOption.dataset.doctorName || rawSelection) : rawSelection;
+      const specialist = selectedOption
+        ? (selectedOption.dataset.specialty || doctorName)
+        : rawSelection;
+      if (!input.value) { showError('Please pick a date and time.'); input.focus(); return; }
+      const chosen = new Date(input.value);
+      if (isNaN(chosen.getTime())) { showError('That date/time isn\'t valid.'); input.focus(); return; }
+      if (chosen.getTime() < Date.now()) { showError('That time has already passed — please pick a date/time in the future.'); input.focus(); return; }
+
+      errorEl.classList.add('hidden');
+      btnEl.closest('.space-y-2').querySelectorAll('input,button').forEach(el => el.disabled = true);
+      addModeSelectMessage(specialist, input.value + ':00', doctorId);
+    }
+
+    function addModeSelectMessage(specialist, isoDate, doctorId = null) {
+      // Carry forward mode/phone if the patient is coming back to this step
+      // after changing something further along, rather than losing them.
+      const carried = window._pendingBooking || {};
+      window._pendingBooking = { specialist, doctorId: doctorId || carried.doctorId || null, isoDate, mode: carried.mode || null, contactPhone: carried.contactPhone || null };
+      const when = new Date(isoDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+      addCardMessage(`<p class="text-sm mb-1">How would you like the consultation for your ${e(specialist)} appointment on ${e(when)}?</p>
+    <div class="flex gap-2 flex-wrap mb-2">
+      <button onclick="selectConsultationMode('video', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg"><i class="fa-solid fa-video mr-1"></i>Video</button>
+      <button onclick="selectConsultationMode('phone', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg"><i class="fa-solid fa-phone mr-1"></i>Phone</button>
+      <button onclick="selectConsultationMode('in-clinic', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg"><i class="fa-solid fa-hospital mr-1"></i>In-Clinic</button>
+    </div>
+  `, 'Appointment');
+      saveSession();
+    }
+
+    // Video/phone consults need a number to actually reach the patient on —
+    // in-clinic doesn't, so that one skips straight to booking.
+    function selectConsultationMode(mode, btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+      window._pendingBooking.mode = mode;
+      if (mode === 'in-clinic') {
+        bookAppointment(mode, btnEl);
+        return;
+      }
+      addPhoneNumberMessage(mode);
+    }
+
+    // Bumped for every card, and baked into the radio `name` attribute, so two
+    // phone-number cards open at once (old + new, after "Change consultation
+    // mode") never share a radio group — a shared name would let checking a
+    // radio in the new card silently uncheck the one in the old, and vice versa.
+    let _phoneCardSeq = 0;
+
+    function addPhoneNumberMessage(mode) {
+      const { specialist, isoDate } = window._pendingBooking;
+      const onFile = (PATIENT && PATIENT.phone) ? PATIENT.phone : '';
+      const modeLabel = mode === 'video' ? 'video call' : 'phone call';
+      const groupName = `phoneChoice_${++_phoneCardSeq}`;
+      let html = `<p class="text-sm mb-2">What number should we use for the ${e(modeLabel)}?</p>`;
+      if (onFile) {
+        html += `
+      <label class="flex items-center gap-2 border rounded-lg p-2.5 text-sm cursor-pointer mb-2" style="border-color:var(--line);">
+        <input type="radio" name="${groupName}" value="onfile" checked onchange="togglePhoneInput(this, false)"> Use number on file (${e(onFile)})
+      </label>
+      <label class="flex items-center gap-2 border rounded-lg p-2.5 text-sm cursor-pointer mb-2" style="border-color:var(--line);">
+        <input type="radio" name="${groupName}" value="other" onchange="togglePhoneInput(this, true)"> Use a different number
+      </label>`;
+      }
+      html += `<input type="tel" inputmode="numeric" maxlength="11" placeholder="03XXXXXXXXX (11 digits)" class="appt-phone-input w-full border rounded-lg p-2.5 text-sm mb-2${onFile ? ' hidden' : ''}" style="border-color:var(--line);" oninput="this.value = this.value.replace(/\\D/g, '').slice(0, 11)">
+    <p class="appt-phone-error text-xs mb-2 hidden" style="color:var(--coral);"></p>
+    <button onclick="confirmPhoneNumber('${mode}', '${onFile.replace(/'/g, "\\'")}', this)" class="btn-primary text-xs font-semibold px-3 py-1.5 rounded-lg w-full mb-2">Continue</button>
+    <button onclick="addModeSelectMessage('${specialist.replace(/'/g, "\\'")}', '${isoDate}', window._pendingBooking?.doctorId || null)" class="text-xs font-medium underline w-full text-center block" style="color:var(--ink-soft);">← Change consultation mode</button>`;
+      addCardMessage(html, 'Appointment');
+      saveSession();
+    }
+
+    function togglePhoneInput(radioEl, show) {
+      const card = radioEl.closest('.space-y-2');
+      const input = card && card.querySelector('.appt-phone-input');
+      if (!input) return;
+      input.classList.toggle('hidden', !show);
+      if (show) input.focus();
+    }
+
+    function confirmPhoneNumber(mode, onFileNumber, btnEl) {
+      const card = btnEl.closest('.space-y-2');
+      const chosen = card.querySelector('input[type="radio"]:checked');
+      const errorEl = card.querySelector('.appt-phone-error');
+      let phone;
+      if (chosen && chosen.value === 'onfile') {
+        phone = (onFileNumber || '').replace(/\D/g, '');
+      } else {
+        phone = (card.querySelector('.appt-phone-input').value || '').replace(/\D/g, '');
+      }
+      if (!phone) {
+        errorEl.textContent = 'Please enter a phone number.';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      if (phone.length !== 11) {
+        errorEl.textContent = `Phone numbers must be exactly 11 digits (got ${phone.length}).`;
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      errorEl.classList.add('hidden');
+      btnEl.closest('.space-y-2').querySelectorAll('input,button').forEach(el => el.disabled = true);
+      window._pendingBooking.contactPhone = phone;
+      bookAppointment(mode, btnEl);
+    }
+
+    async function findExistingAppointmentForPatient(patientId, specialist) {
+      if (!patientId) return null;
+      try {
+        const res = await fetch(`${API_BASE}/api/appointments?patient_id=${encodeURIComponent(patientId)}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        const appts = (data.appointments || []).slice().filter(a =>
+          (a.status === 'scheduled' || a.status === 'waitlisted') &&
+          (!specialist || (a.specialist || '').toLowerCase() === specialist.toLowerCase())
+        );
+        appts.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        return appts[0] || null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function showExistingAppointmentConfirmation(appt, mode, btnEl) {
+      window._pendingBooking = window._pendingBooking || {};
+      window._pendingBooking.existingAppointment = appt;
+      const dateLabel = appt.date ? new Date(appt.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : appt.date || 'an upcoming time';
+      const existingReason = appt.reason ? `${e(appt.reason)}` : 'No reason recorded yet';
+      const html = `
+      <p class="text-sm mb-2">You already have an upcoming appointment on ${e(dateLabel)}.</p>
+      <p class="text-xs mb-2" style="color:var(--ink-soft);">${e(appt.specialist || '')} · ${e(appt.status || '')}</p>
+      <p class="text-sm mb-3">Would you like to add your current symptom to that appointment instead of booking another?</p>
+      <p class="text-xs mb-3" style="color:var(--ink-soft);">Current reason: ${existingReason}</p>
+      <div class="flex flex-wrap gap-2">
+        <button onclick="useExistingAppointment('${appt.appointment_id.replace(/'/g, "\\'")}', '${mode}', this)" class="btn-primary rounded-lg px-3 py-1.5 text-xs font-semibold">Yes, update existing appointment</button>
+        <button onclick="bookNewAppointment('${mode}', this)" class="btn-ghost rounded-lg px-3 py-1.5 text-xs font-semibold">No, book a new one</button>
+      </div>`;
+      addCardMessage(html, 'Appointment');
+    }
+
+    async function useExistingAppointment(appointmentId, mode, btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+      const existing = window._pendingBooking?.existingAppointment;
+      if (!existing || existing.appointment_id !== appointmentId) {
+        addBotMessage('I could not find your existing appointment. Please try again.', 'Appointment');
+        return;
+      }
+      const newReason = (PATIENT?.visit_reason || PATIENT?.reason || '').trim();
+      let combinedReason = existing.reason || '';
+      if (newReason) {
+        if (!combinedReason) {
+          combinedReason = newReason;
+        } else if (!combinedReason.includes(newReason)) {
+          combinedReason = `${combinedReason}; ${newReason}`;
+        }
+      }
+      showTyping();
+      try {
+        const res = await fetchWithTimeout(`${API_BASE}/agent/appointment`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_id: PATIENT.patient_id,
+            action: 'update',
+            user_input: 'update appointment reason',
+            appointment_id: appointmentId,
+            updates: { reason: combinedReason },
+          }),
+        });
+        const data = await res.json();
+        hideTyping();
+        if (!res.ok) {
+          addBotMessage('Could not update your appointment right now. Please try booking again or contact support.', 'Error');
+          return;
+        }
+        addBotMessage('Okay — I updated your existing appointment with the new symptom.');
+        addCardMessage(buildAppointmentCard(data.output || {}), 'Appointment');
+      } catch (err) {
+        hideTyping();
+        addBotMessage('I could not update your appointment right now. Please try again.', 'Error');
+      }
+    }
+
+    function bookNewAppointment(mode, btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+      return bookAppointment(mode, btnEl, { skipExistingAppointmentCheck: true });
+    }
+
+    function pickSuggestedSlot(isoDate, specialist, doctorId, btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+      addModeSelectMessage(specialist, isoDate, doctorId || null);
+    }
+
+    async function bookAppointment(mode, btnEl, options = {}) {
+      const stepControls = btnEl.closest('.space-y-2').querySelectorAll('input,button');
+      stepControls.forEach(el => el.disabled = true);
+      const { specialist, doctorId, isoDate, contactPhone } = window._pendingBooking;
+      if (!options.skipExistingAppointmentCheck) {
+        const existing = await findExistingAppointmentForPatient(PATIENT.patient_id, specialist);
+        if (existing) {
+          showExistingAppointmentConfirmation(existing, mode, btnEl);
+          return;
+        }
+      }
+      showTyping();
+      let out = null;
+      let failed = false;
+      try {
+        const appointmentReason = (PATIENT?.visit_reason || PATIENT?.reason || '').trim();
+        const res = await fetchWithTimeout(`${API_BASE}/agent/appointment`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_id: PATIENT.patient_id, action: 'create', user_input: 'book appointment',
+            date: isoDate, specialist, doctor_id: doctorId || null, consultation_mode: mode,
+            contact_phone: contactPhone || null,
+            reason: appointmentReason || null,
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        hideTyping();
+        if (!res.ok) {
+          const detail = data.detail || data.message || 'Could not process that appointment. Please try again.';
+          out = { error: detail };
+        } else {
+          out = data.output || { error: 'The appointment service returned an empty response. Please try again.' };
+        }
+        addCardMessage(buildAppointmentCard(out), 'Appointment');
+      } catch (err) {
+        hideTyping();
+        failed = true;
+        if (err.name === 'AbortError') {
+          addBotMessage("Booking is taking much longer than expected — the assistant may be under heavy load. Please try again.", 'Appointment');
+        } else {
+          addBotMessage('Something went wrong booking that appointment. Please try again.', 'Appointment');
+        }
+        // Re-enable this same step's controls so the patient can just retry —
+        // a transient failure here should not throw away the date/specialist/
+        // mode/phone already chosen and force the whole booking to restart.
+        stepControls.forEach(el => el.disabled = false);
+      }
+      saveSession();
+      if (failed) return;
+
+      if (out && out.status === 'no_availability') {
+        // Self-care/OTC guidance was already given earlier in the conversation,
+        // before the appointment was ever offered — don't re-show it here.
+        // Just let the patient pick a real open slot or their own date/time.
+        addBotMessage('Or, if none of those work, pick your own date/time:');
+        addDatePickerMessage(specialist);
+        return; // addDatePickerMessage already locked input for the next pick
+      }
+
+      window._pendingBooking = null;
+      lastRoute = null;
+      unlockInput();
+      saveSession();
+    }
+
+    function respondAppointmentOffer(accepted, specialist, btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+      if (!accepted) {
+        addBotMessage('No problem — let me know if you change your mind. You can type "book appointment" any time to schedule one.');
+        // Store the specialist so if the user later says "book appointment"
+        // we can go straight to the date picker without asking again.
+        window._lastOfferedSpecialist = specialist || 'General Physician';
+        lastRoute = { awaiting: 'self_care_followup', specialist: window._lastOfferedSpecialist };
+        saveSession();
+        return;
+      }
+      addDatePickerMessage(specialist);
+    }
+
+    // Called when the patient taps an option on the intent_clarify menu card
+    // (symptom / appointment_management / other). Resubmits the ORIGINAL
+    // message with forced_intent set, so the backend honors the tap directly
+    // instead of re-classifying it.
+    async function respondIntentClarify(choice, btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+      if (!lastRoute || lastRoute.awaiting !== 'intent_clarify') return;
+      addUserMessage(btnEl.textContent.trim());
+      showTyping();
+      const { accumulated: conversationSoFar, round: priorRound, latestText } = lastRoute;
+      lastRoute = null;
+      try {
+        const res = await fetchWithTimeout(`${API_BASE}/agent/chat`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_id: PATIENT.patient_id,
+            message: latestText || conversationSoFar || btnEl.textContent.trim(),
+            clarify_round: Number.isInteger(priorRound) ? priorRound : 0,
+            session_id: SESSION_ID || undefined,
+            forced_intent: choice,
+          })
+        });
+        hideTyping();
+        handleChatResponse(await res.json(), conversationSoFar, priorRound, latestText);
+      } catch (err) {
+        hideTyping();
+        if (err.name === 'AbortError') {
+          addBotMessage("That's taking much longer than expected — please try again in a moment.", 'Error');
+        } else {
+          addBotMessage("I couldn't reach the server. Please try again.", 'Error');
+        }
+        saveSession();
+      }
+    }
+
+    // Called when user types "book appointment" after previously choosing self-care.
+    function bookAppointmentFromSelfCare(specialist) {
+      addUserMessage('Book an appointment');
+      addDatePickerMessage(specialist || window._lastOfferedSpecialist || 'General Physician');
+    }
+
+    // --- RESCHEDULE / CANCEL UI ---
+    // Shows per-appointment action cards when the patient asks about managing
+    // their existing appointments.
+    function addAppointmentManagementCards(appointments) {
+      if (!appointments || !appointments.length) {
+        addBotMessage("You don't have any upcoming appointments on file. Would you like to book one?");
+        addCardMessage(`<button onclick="addDatePickerMessage('General Physician')" class="btn-primary text-xs font-semibold px-3 py-1.5 rounded-lg w-full">Book a new appointment</button>`, 'Appointment');
+        unlockInput();
+        return;
+      }
+      for (const appt of appointments) {
+        const dateLabel = appt.date ? new Date(appt.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : appt.date || '—';
+        const apptIdSafe = (appt.appointment_id || '').replace(/'/g, "\\'");
+        const specialistSafe = (appt.specialist || 'General Physician').replace(/'/g, "\\'");
+        addCardMessage(`
+      <p class="font-semibold text-sm mb-1"><i class="fa-solid fa-calendar-days mr-1" style="color:var(--teal);"></i> ${e(dateLabel)}</p>
+      <p class="text-xs mb-1" style="color:var(--ink-soft);">Specialist: ${e(appt.specialist || '—')} &nbsp;|&nbsp; ID: ${e(appt.appointment_id || '—')}</p>
+      <div class="flex gap-2 flex-wrap mt-2">
+        <button onclick="rescheduleAppointment('${apptIdSafe}', '${specialistSafe}', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg">
+          <i class="fa-solid fa-clock-rotate-left mr-1"></i>Reschedule
+        </button>
+        <button onclick="changeAppointmentMode('${apptIdSafe}', '${specialistSafe}', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg">
+          <i class="fa-solid fa-video mr-1"></i>Change Mode
+        </button>
+        <button onclick="cancelAppointment('${apptIdSafe}', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg" style="color:var(--coral);">
+          <i class="fa-solid fa-xmark mr-1"></i>Cancel
+        </button>
+      </div>
+    `, 'Appointment');
+      }
+      unlockInput();
+    }
+
+    function rescheduleAppointment(appointmentId, specialist, btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+      window._reschedulingAppointmentId = appointmentId;
+      // Use the date picker — the booking call will be an update, not a create.
+      lockInput();
+      addRescheduleDatePicker(appointmentId, specialist);
+    }
+
+    function addRescheduleDatePicker(appointmentId, specialist) {
+      const nowLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      addCardMessage(`
+    <p class="text-sm mb-1 font-semibold">Reschedule appointment</p>
+    <p class="text-xs mb-2" style="color:var(--ink-soft);">ID: ${e(appointmentId)}</p>
+    <p class="text-sm mb-1">Pick a new date and time:</p>
+    <input type="datetime-local" class="appt-date-input w-full border rounded-lg p-2 text-sm mb-2" min="${nowLocal}" style="border-color:var(--line);">
+    <p class="appt-date-error text-xs mb-2 hidden" style="color:var(--coral);"></p>
+    <button onclick="confirmReschedule('${appointmentId.replace(/'/g, "\\'")}', '${specialist.replace(/'/g, "\\'")}', this)" class="btn-primary text-xs font-semibold px-3 py-1.5 rounded-lg w-full">Confirm Reschedule</button>
+  `, 'Appointment');
+    }
+
+    async function confirmReschedule(appointmentId, specialist, btnEl) {
+      const card = btnEl.closest('.space-y-2');
+      const input = card.querySelector('.appt-date-input');
+      const errorEl = card.querySelector('.appt-date-error');
+      const showError = (msg) => { errorEl.textContent = msg; errorEl.classList.remove('hidden'); };
+
+      if (!input.value) { showError('Please pick a date and time.'); input.focus(); return; }
+      const chosen = new Date(input.value);
+      if (isNaN(chosen.getTime())) { showError("That date/time isn't valid."); input.focus(); return; }
+      if (chosen.getTime() < Date.now()) { showError('That time has already passed — please pick a future date/time.'); input.focus(); return; }
+
+      errorEl.classList.add('hidden');
+      card.querySelectorAll('input,button').forEach(el => el.disabled = true);
+      showTyping();
+
+      try {
+        const res = await fetchWithTimeout(`${API_BASE}/agent/appointment`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_id: PATIENT.patient_id,
+            action: 'update',
+            user_input: 'reschedule appointment',
+            appointment_id: appointmentId,
+            updates: { date: input.value + ':00' },
+          })
+        });
+        const data = await res.json();
+        hideTyping();
+        addCardMessage(buildAppointmentCard(data.output || {}), 'Appointment');
+      } catch (err) {
+        hideTyping();
+        addBotMessage('Something went wrong rescheduling. Please try again.', 'Appointment');
+        card.querySelectorAll('input,button').forEach(el => el.disabled = false);
+      }
+      unlockInput();
+      saveSession();
+    }
+
+    function changeAppointmentMode(appointmentId, specialist, btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+      lockInput();
+      addChangeModeCard(appointmentId, specialist);
+    }
+
+    function addChangeModeCard(appointmentId, specialist) {
+      addCardMessage(`
+    <p class="text-sm mb-2 font-semibold">Change consultation mode</p>
+    <p class="text-xs mb-3" style="color:var(--ink-soft);">ID: ${e(appointmentId)}</p>
+    <div class="flex gap-2 flex-wrap mb-2">
+      <button onclick="confirmModeChange('${appointmentId.replace(/'/g, "\\'")}', 'video', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg"><i class="fa-solid fa-video mr-1"></i>Video</button>
+      <button onclick="confirmModeChange('${appointmentId.replace(/'/g, "\\'")}', 'phone', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg"><i class="fa-solid fa-phone mr-1"></i>Phone</button>
+      <button onclick="confirmModeChange('${appointmentId.replace(/'/g, "\\'")}', 'in-clinic', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg"><i class="fa-solid fa-hospital mr-1"></i>In-Clinic</button>
+    </div>
+  `, 'Appointment');
+    }
+
+    async function confirmModeChange(appointmentId, newMode, btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+
+      // For video/phone we need a contact phone number — collect it first.
+      if (newMode === 'phone' || newMode === 'video') {
+        addChangeModePhoneCard(appointmentId, newMode);
+        return;
+      }
+      await doModeUpdateRequest(appointmentId, newMode, null, btnEl);
+    }
+
+    function addChangeModePhoneCard(appointmentId, mode) {
+      const onFile = (PATIENT && PATIENT.phone) ? PATIENT.phone : '';
+      const modeLabel = mode === 'video' ? 'video call' : 'phone call';
+      const groupName = `modePhone_${++_phoneCardSeq}`;
+      let html = `<p class="text-sm mb-2">What number should we use for the ${e(modeLabel)}?</p>`;
+      if (onFile) {
+        html += `
+      <label class="flex items-center gap-2 border rounded-lg p-2.5 text-sm cursor-pointer mb-2" style="border-color:var(--line);">
+        <input type="radio" name="${groupName}" value="onfile" checked onchange="togglePhoneInput(this, false)"> Use number on file (${e(onFile)})
+      </label>
+      <label class="flex items-center gap-2 border rounded-lg p-2.5 text-sm cursor-pointer mb-2" style="border-color:var(--line);">
+        <input type="radio" name="${groupName}" value="other" onchange="togglePhoneInput(this, true)"> Use a different number
+      </label>`;
+      }
+      html += `<input type="tel" inputmode="numeric" maxlength="11" placeholder="03XXXXXXXXX (11 digits)" class="appt-phone-input w-full border rounded-lg p-2.5 text-sm mb-2${onFile ? ' hidden' : ''}" style="border-color:var(--line);" oninput="this.value = this.value.replace(/\\D/g, '').slice(0, 11)">
+    <p class="appt-phone-error text-xs mb-2 hidden" style="color:var(--coral);"></p>
+    <button onclick="confirmModeChangeWithPhone('${appointmentId.replace(/'/g, "\\'")}', '${mode}', '${(onFile).replace(/'/g, "\\'")}', this)" class="btn-primary text-xs font-semibold px-3 py-1.5 rounded-lg w-full">Confirm</button>`;
+      addCardMessage(html, 'Appointment');
+    }
+
+    async function confirmModeChangeWithPhone(appointmentId, mode, onFileNumber, btnEl) {
+      const card = btnEl.closest('.space-y-2');
+      const chosen = card.querySelector('input[type="radio"]:checked');
+      const errorEl = card.querySelector('.appt-phone-error');
+      let phone;
+      if (chosen && chosen.value === 'onfile') {
+        phone = (onFileNumber || '').replace(/\D/g, '');
+      } else {
+        phone = (card.querySelector('.appt-phone-input').value || '').replace(/\D/g, '');
+      }
+      if (!phone || phone.length !== 11) {
+        errorEl.textContent = phone ? `Phone numbers must be exactly 11 digits (got ${phone.length}).` : 'Please enter a phone number.';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      errorEl.classList.add('hidden');
+      card.querySelectorAll('input,button').forEach(el => el.disabled = true);
+      await doModeUpdateRequest(appointmentId, mode, phone, btnEl);
+    }
+
+    async function doModeUpdateRequest(appointmentId, mode, contactPhone, btnEl) {
+      showTyping();
+      const updates = { consultation_mode: mode };
+      if (contactPhone) updates.contact_phone = contactPhone;
+      try {
+        const res = await fetchWithTimeout(`${API_BASE}/agent/appointment`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_id: PATIENT.patient_id,
+            action: 'update',
+            user_input: 'change consultation mode',
+            appointment_id: appointmentId,
+            updates,
+          })
+        });
+        const data = await res.json();
+        hideTyping();
+        addCardMessage(buildAppointmentCard(data.output || {}), 'Appointment');
+      } catch (err) {
+        hideTyping();
+        addBotMessage('Something went wrong changing the mode. Please try again.', 'Appointment');
+      }
+      unlockInput();
+      saveSession();
+    }
+
+    async function cancelAppointment(appointmentId, btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+      lockInput();
+      // Confirm before cancelling.
+      addCardMessage(`
+    <p class="text-sm mb-2">Are you sure you want to cancel this appointment?</p>
+    <p class="text-xs mb-3" style="color:var(--ink-soft);">ID: ${e(appointmentId)}</p>
+    <div class="flex gap-2">
+      <button onclick="confirmCancelAppointment('${appointmentId.replace(/'/g, "\\'")}', this)" class="btn-primary text-xs font-semibold px-3 py-1.5 rounded-lg" style="background:var(--coral);">Yes, cancel it</button>
+      <button onclick="abortCancel(this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg">No, keep it</button>
+    </div>
+  `, 'Appointment');
+    }
+
+    function abortCancel(btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+      addBotMessage('Okay, keeping your appointment as-is.');
+      unlockInput();
+      saveSession();
+    }
+
+    async function confirmCancelAppointment(appointmentId, btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+      showTyping();
+      try {
+        const res = await fetchWithTimeout(`${API_BASE}/agent/appointment`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_id: PATIENT.patient_id,
+            action: 'cancel',
+            user_input: 'cancel appointment',
+            appointment_id: appointmentId,
+          })
+        });
+        const data = await res.json();
+        hideTyping();
+        addCardMessage(buildAppointmentCard(data.output || {}), 'Appointment');
+      } catch (err) {
+        hideTyping();
+        addBotMessage('Something went wrong cancelling. Please try again.', 'Appointment');
+      }
+      unlockInput();
+      saveSession();
+    }
+
+    // Called when user clicks "Yes, show me medication options" after assessment.
+    async function respondMedicationOffer(accepted, complaint, specialist, btnEl) {
+      btnEl.closest('.space-y-2').querySelectorAll('button').forEach(el => el.disabled = true);
+      if (!accepted) {
+        // Skip medication — go straight to appointment offer.
+        const specialist_ = specialist || 'General Physician';
+        const medCard = `<p class="text-sm mt-2">Would you like to continue with self-care for now, or would you like help booking an appointment with a ${e(specialist_)}?</p>
+      <div class="flex gap-2 mt-1">
+        <button onclick="respondAppointmentOffer(true, '${specialist_.replace(/'/g, "\\'")}', this)" class="btn-primary text-xs font-semibold px-3 py-1.5 rounded-lg">Book an appointment</button>
+        <button onclick="respondAppointmentOffer(false, '', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg">Continue with self-care</button>
+      </div>`;
+        addCardMessage(medCard, 'Self-Care & Medication');
+        lastRoute = null;
+        saveSession();
+        return;
+      }
+      // User wants medication — call the medication-then-appointment endpoint.
+      showTyping();
+      try {
+        const res = await fetchWithTimeout(`${API_BASE}/agent/medication-then-appointment`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_id: PATIENT.patient_id,
+            complaint,
+            specialist: specialist || 'General Physician',
+            session_id: SESSION_ID || undefined,
+          })
+        });
+        const data = await res.json();
+        hideTyping();
+        if (!data || !data.output) {
+          addBotMessage('Something went wrong loading medication info. Please try again.', 'Error');
+          return;
+        }
+        const out = data.output;
+        const med = out.self_care_result || {};
+        let medHtml = buildMedicationCard(med);
+        const specialist_ = out.offer_appointment_specialist || specialist || 'General Physician';
+        medHtml += `<p class="text-sm mt-2">Would you like to continue with self-care for now, or would you like help booking an appointment with a ${e(specialist_)}?</p>
+      <div class="flex gap-2 mt-1">
+        <button onclick="respondAppointmentOffer(true, '${specialist_.replace(/'/g, "\\'")}', this)" class="btn-primary text-xs font-semibold px-3 py-1.5 rounded-lg">Book an appointment</button>
+        <button onclick="respondAppointmentOffer(false, '', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg">Continue with self-care</button>
+      </div>`;
+        addCardMessage(medHtml, 'Self-Care & Medication');
+        lastRoute = null;
+      } catch (err) {
+        hideTyping();
+        addBotMessage('Something went wrong loading medication info. Please try again.', 'Error');
+      }
+      saveSession();
+    }
+
+    // --- CHAT ---
+    // Detects if the user is trying to book an appointment via free text,
+    // even after having previously clicked "Continue with self-care".
+    const _BOOK_INTENT_PATTERN = /\b(book|schedule|make|set up|arrange)\s+(an?\s+)?(appointment|visit|consult|booking)\b/i;
+
+    async function sendChat() {
+      if (sending) return; // a request is already in flight — ignore duplicate submits
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text || input.disabled) return;
+      sending = true;
+      const sendBtn = document.getElementById('sendBtn');
+      sendBtn.disabled = true;
+      input.value = '';
+      addUserMessage(text);
+      showTyping();
+
+      try {
+        // If user previously chose "Continue with self-care" and now wants
+        // to book, detect that intent and go straight to the date picker.
+        if (lastRoute && lastRoute.awaiting === 'self_care_followup' && _BOOK_INTENT_PATTERN.test(text)) {
+          hideTyping();
+          addDatePickerMessage(lastRoute.specialist || window._lastOfferedSpecialist || 'General Physician');
+          lastRoute = null;
+          sending = false;
+          sendBtn.disabled = false;
+          return;
+        }
+
+        if (lastRoute && lastRoute.awaiting === 'clarify') {
+          const res = await fetchWithTimeout(`${API_BASE}/agent/chat`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              patient_id: PATIENT.patient_id, message: lastRoute.accumulated,
+              clarifying_answer: text, clarify_round: lastRoute.round,
+              session_id: SESSION_ID || undefined,
+            })
+          });
+          hideTyping();
+          // Fold this answer into the running context BEFORE handling the
+          // response, so if the agent asks yet another clarifying question,
+          // nothing said so far — including this latest answer — gets lost.
+          // `text` (the raw latest reply) is also passed through separately,
+          // since a topic-switch response needs to reset the accumulated
+          // context to just this new message rather than the old + new blend.
+          const carriedContext = `${lastRoute.accumulated}\n${text}`;
+          handleChatResponse(await res.json(), carriedContext, lastRoute.round, text);
+          return;
+        }
+
+        const res = await fetchWithTimeout(`${API_BASE}/agent/chat`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patient_id: PATIENT.patient_id, message: text, clarify_round: 0, session_id: SESSION_ID || undefined })
+        });
+        hideTyping();
+        handleChatResponse(await res.json(), text, 0, text);
+      } catch (err) {
+        hideTyping();
+        if (err.name === 'AbortError') {
+          addBotMessage("That's taking much longer than expected — the assistant may be under heavy load. Please try again in a moment.", 'Error');
+        } else {
+          addBotMessage("I couldn't reach the server. Please try again.", 'Error');
+        }
+        // Deliberately do NOT touch lastRoute here — a transient network
+        // failure should not throw away a clarifying question or appointment
+        // flow already in progress; the person can just answer again.
+        saveSession();
+      } finally {
+        sending = false;
+        sendBtn.disabled = false;
+      }
+    }
+
+    function handleChatResponse(data, conversationSoFar, priorRound, latestText) {
+      if (data && data.session_id) SESSION_ID = data.session_id;
+      if (!data || !data.output) {
+        const errText = (data && (typeof data.detail === 'string' ? data.detail : data.error))
+          || "Something went wrong processing that. Please try again.";
+        addBotMessage(errText, 'Error');
+        saveSession();
+        return;
+      }
+      const out = data.output;
+      const route = out.route;
+      const topicSwitched = !!out._topic_switched;
+      const additiveSymptom = !!out._additive_symptom;
+
+      if (route === 'emergency') {
+        addBotMessage(out.display_text || out.message || 'This may be an emergency.', 'Emergency');
+        lastRoute = null;
+        saveSession();
+        return;
+      }
+      if (route === 'error') {
+        addBotMessage(out.display_text || out.error || 'Something went wrong.', 'Error');
+        lastRoute = null;
+        saveSession();
+        return;
+      }
+      if (route === 'meta') {
+        // Answer to "what are my symptoms / what did I tell you" — plain text, no cards.
+        addBotMessage(out.display_text || "Here's a summary of what you've shared so far.");
+        lastRoute = null;
+        saveSession();
+        return;
+      }
+      if (route === 'appointment_management') {
+        addBotMessage(out.display_text || "Let's sort out your appointment.", 'Appointment');
+        // Show per-appointment action cards (reschedule / change mode / cancel).
+        addAppointmentManagementCards(out.appointments || []);
+        lastRoute = null;
+        saveSession();
+        return;
+      }
+      if (route === 'intent_clarify') {
+        // The backend couldn't confidently tell whether this was a symptom or
+        // about an existing appointment. Show the options as buttons rather
+        // than asking the patient to retype anything; remember what they
+        // originally said so the follow-up call can resolve it with
+        // forced_intent instead of re-classifying.
+        const optsHtml = (out.intent_options || []).map(opt =>
+          `<button onclick="respondIntentClarify('${opt.id.replace(/'/g, "\\'")}', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg">${e(opt.label)}</button>`
+        ).join('');
+        addCardMessage(
+          `<p class="text-sm">${e(out.display_text || 'Just to make sure I help with the right thing:')}</p>
+       <div class="flex gap-2 flex-wrap mt-2">${optsHtml}</div>`,
+          'Assessment'
+        );
+        lastRoute = { awaiting: 'intent_clarify', accumulated: conversationSoFar, round: priorRound, latestText: latestText };
+        saveSession();
+        return;
+      }
+
+      if (topicSwitched) {
+        addBotMessage("That sounds like a different concern than what we were just discussing — let's take a look at this instead.");
+      } else if (additiveSymptom) {
+        addBotMessage("Got it — I've added that to your symptoms and updated the assessment.");
+      }
+
+      if (route === 'clarify') {
+        // Always show the assessment on first turn or after topic/additive switch.
+        if (!priorRound || topicSwitched || additiveSymptom) {
+          addCardMessage(buildAssessmentSection(out), 'Assessment');
+        }
+        if (out.clarifying_question) addBotMessage(out.clarifying_question, 'Assessment');
+        const nextAccumulated = (topicSwitched || additiveSymptom) ? (latestText || conversationSoFar) : conversationSoFar;
+        lastRoute = { awaiting: 'clarify', accumulated: nextAccumulated, round: (topicSwitched || additiveSymptom) ? 1 : (priorRound || 0) + 1 };
+        saveSession();
+        return;
+      }
+
+      // Terminal resolution — show full assessment.
+      addCardMessage(buildAssessmentSection(out), 'Assessment');
+
+      if (route === 'ask_medication') {
+        // Assessment is done. Ask the user if they want medication recommendations.
+        const specialist = out.offer_appointment_specialist || 'General Physician';
+        const complaint = conversationSoFar || latestText || '';
+        const medOfferHtml = `<p class="text-sm mt-1">Would you like medication and self-care recommendations for this?</p>
+      <div class="flex gap-2 mt-2">
+        <button onclick="respondMedicationOffer(true, '${e(complaint).replace(/'/g, "\\'").replace(/\n/g, ' ')}', '${specialist.replace(/'/g, "\\'")}', this)" class="btn-primary text-xs font-semibold px-3 py-1.5 rounded-lg">Yes, show me options</button>
+        <button onclick="respondMedicationOffer(false, '', '${specialist.replace(/'/g, "\\'")}', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg">No thanks</button>
+      </div>`;
+        addCardMessage(medOfferHtml, 'Self-Care & Medication');
+        lastRoute = null;
+        saveSession();
+        return;
+      }
+
+      if (route === 'self_care') {
+        const med = out.self_care_result || {};
+        let medHtml = buildMedicationCard(med);
+        if (out.offer_appointment) {
+          const specialist = out.offer_appointment_specialist || 'General Physician';
+          medHtml += `<p class="text-sm mt-2">Would you like to continue with self-care for now, or would you like help booking an appointment with a ${e(specialist)}?</p>
+        <div class="flex gap-2 mt-1">
+          <button onclick="respondAppointmentOffer(true, '${specialist.replace(/'/g, "\\'")}', this)" class="btn-primary text-xs font-semibold px-3 py-1.5 rounded-lg">Book an appointment</button>
+          <button onclick="respondAppointmentOffer(false, '', this)" class="btn-ghost text-xs font-semibold px-3 py-1.5 rounded-lg">Continue with self-care</button>
+        </div>`;
+        }
+        if (medHtml) addCardMessage(medHtml, 'Self-Care & Medication');
+        lastRoute = null;
+      } else {
+        lastRoute = null;
+      }
+      saveSession();
+    }
+
+    async function submitLabReport() {
+      const fileInput = document.getElementById('labFile');
+      const file = fileInput.files[0];
+      if (!file) return;
+      addUserMessage(`📎 Uploaded: ${file.name}`);
+      const formData = new FormData();
+      formData.append('patient_id', PATIENT.patient_id);
+      formData.append('file', file);
+      // Send the current session_id so the report lands in the SAME
+      // conversation history the chat uses — otherwise a later "what does
+      // my report suggest?" question can't see it (server creates/returns
+      // one either way if we don't have one yet).
+      if (SESSION_ID) formData.append('session_id', SESSION_ID);
+      showTyping();
+      try {
+        const res = await fetchWithTimeout(`${API_BASE}/agent/lab-report`, { method: 'POST', body: formData });
+        const data = await res.json();
+        hideTyping();
+        if (data.session_id) SESSION_ID = data.session_id;
+        const out = data.output || {};
+        if (out.error) addBotMessage(out.display_text || out.error, 'Lab Report');
+        else addCardMessage(buildLabReportCard(out), 'Lab Report');
+      } catch (err) {
+        hideTyping();
+        if (err.name === 'AbortError') {
+          addBotMessage("That's taking much longer than expected — please try again in a moment.", 'Lab Report');
+        } else {
+          addBotMessage("Couldn't read that file. Please try again.", 'Lab Report');
+        }
+      }
+      fileInput.value = '';
+      saveSession();
+    }
+
+    bootstrap();
+  </script>
+</body>
+
+</html>
