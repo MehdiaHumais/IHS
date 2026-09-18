@@ -1,0 +1,16 @@
+VERIFIED CHANGE
+===============
+The login form order is now:
+1. User type
+2. Username or email
+3. Password
+4. Log in button
+
+All four controls are inside the same st.form("login_form") block.
+
+IMPORTANT:
+Extract this ZIP into a NEW empty folder.
+Run the app.py located directly at the extracted ZIP root:
+    python -m streamlit run app.py
+
+Do not launch an older extracted copy.

@@ -1,0 +1,11 @@
+Brain Stroke Diagnosis color update
+
+Only the Brain Stroke Diagnosis interface color styling was updated to match the supplied StrokeGuard AI reference:
+- Mint-green to soft-cyan page gradient
+- Translucent white hero and content cards
+- Deep teal Brain Stroke heading
+- Pink Diagnosis accent
+- Soft gray-white input fields
+- Matching green action buttons
+
+No application logic, form fields, model files, page structure, text, or functionality was changed.

@@ -1,0 +1,6 @@
+Brain Stroke Diagnosis interface update
+- Improved text contrast and visibility for labels, inputs, dropdowns, metrics, alerts, and buttons.
+- Reorganized Patient Information into a clear five-column desktop layout.
+- Reorganized Health Metrics into four columns with a calculated BMI card.
+- Added BMI category guidance.
+- Preserved a single Analyze Stroke Risk action.

@@ -1,0 +1,7 @@
+Pastel color update
+
+Only page-specific interface colors were changed:
+- Heart Disease Diagnosis: #EDBDD5
+- User Dashboard: #F9D4B2
+
+Application logic, models, fields, authentication, layout, and other pages were not changed.

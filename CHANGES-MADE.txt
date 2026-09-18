@@ -1,0 +1,9 @@
+VISIBLE UI FIXES
+================
+1. Replaced assets/breast-cancer-icon.png with a new 512×512 HD ribbon.
+2. Replaced assets/heart-disease-icon.png with a new 512×512 HD anatomical heart.
+3. Added SVG source versions of both icons.
+4. Set every dashboard tool card to exactly 220px height.
+5. Standardized icon area to 52px and aligned all status badges.
+6. Removed stale Python bytecode cache.
+7. Repaired the malformed first import in app.py.

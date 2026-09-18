@@ -1,0 +1,6 @@
+Updates made:
+1. Medical-history records remain stored in medical_history_data.json for each signed-in user until that user saves changes.
+2. Saving now requires a valid signed-in user ID and uses atomic file replacement.
+3. The medical-history form is explicitly configured not to clear after submission.
+4. Patient Search results display only: User ID, Full name, Age, Gender, Updated at.
+No other interface, color, model, authentication, or diagnostic logic was changed.

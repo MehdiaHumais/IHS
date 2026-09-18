@@ -1,0 +1,6 @@
+{
+  "held_out_test_accuracy": 0.75,
+  "cv_balanced_accuracy": 0.6736185383244206,
+  "model_name": "svm_rbf",
+  "n_train": 780
+}

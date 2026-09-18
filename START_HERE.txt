@@ -1,0 +1,34 @@
+SMART CDSS — LIGHTER DIAGNOSTICS UI
+
+Applied changes:
+- Medical background made lighter while remaining visible.
+- General Diagnostics blue banner changed to a soft light-blue panel.
+- Hero heading and description use dark readable text.
+- Alerts, caption panel, buttons, and code block use cleaner rounded styling.
+- Wider content layout to match the supplied reference.
+- Double-click launcher preserved.
+
+Start:
+1. Extract this ZIP.
+2. Double-click RUN_SMART_CDSS.bat.
+3. The app opens automatically at http://localhost:8503
+
+
+USER TYPE UPDATE
+- Login and Sign up now include a User type dropdown.
+- Available types: Patient, Doctor, Smart Clinic, Smart E-Lab,
+  Smart E-Pharmacy, Smart Hospital, and Others.
+- Selecting Others displays a text box for a custom user type.
+- New account types are saved in the Google Sheet.
+- Existing user sheets are upgraded automatically by adding
+  user_type and other_user_type columns.
+
+- User type dropdown controls and opened menus now use a white background.
+
+DASHBOARD CARD UPDATE
+- Image Diagnosis renamed to Breast Cancer Diagnosis.
+- Its icon is now a pink ribbon.
+- Prediction Model renamed to Heart Disease Diagnosis.
+- Its icon is now an anatomical heart.
+- Login and Sign up User type dropdowns are forced to a white background,
+  including the opened options panel.

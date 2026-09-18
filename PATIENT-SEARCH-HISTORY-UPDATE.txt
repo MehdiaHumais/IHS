@@ -1,0 +1,7 @@
+Patient Search update
+
+- Changed only the Patient Search page palette to pastel mint #B2EAD3.
+- Added Search Results and Patient Medical History tabs.
+- Doctors can select a patient from the current search results and view the medical history that patient saved in User Dashboard.
+- Medical history is read-only for doctors.
+- Existing diagnosis logic, authentication, models, and other page styling were not changed.

@@ -1,0 +1,26 @@
+SMART CDSS / Clinical Chatbot appointment booking fix
+
+Fixes included:
+- Appointment picker now sends the registered doctor's stable user_id (doctor_id), not only the doctor's display name.
+- Backend books the exact selected registered doctor and supports any account whose user_type is Doctor/Clinician/Physician.
+- Registered doctors are read from Users, User Registration Responses, Form Responses 1, or Form Responses.
+- A doctor does not need a specialty value to be bookable; specialty is optional.
+- Existing optional doctors-sheet scheduling metadata (specialty, hours, slot length) is still merged when present.
+- Removed the Appointment Agent's old "General Physician only" restriction.
+- Direct create/update/cancel continues to bypass the LLM, reducing model timeout/provider errors.
+- Duplicate appointment detection now uses patient + doctor_id + date/time for exact-doctor bookings.
+- The UI preserves doctor_id while changing consultation mode/date and while selecting suggested slots.
+- Unexpected appointment responses now display backend display_text when available instead of a false generic error.
+- Registration header matching accepts specialty/speciality/specialization/medical_specialty/department aliases.
+
+Validation performed:
+- All Python files compile.
+- The inline chatbot JavaScript passes `node --check`.
+- Mock booking test: exact registered doctor -> created.
+- Mock duplicate test: same patient/doctor/time -> already_exists.
+- Mock outside-hours test: returns no_availability with suggested real slots instead of generic failure.
+
+Important:
+- The Google service account must have access to the same spreadsheet used by SMART CDSS.
+- GOOGLE_SHEET_ID in clinical_chatbot/.env must point to that spreadsheet.
+- The selected time must be inside the doctor's configured working hours (defaults to 09:00-17:00 if no metadata exists).

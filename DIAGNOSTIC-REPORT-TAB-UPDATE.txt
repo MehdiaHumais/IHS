@@ -1,0 +1,8 @@
+Patient Search update
+
+- Improved visibility of disabled/read-only medical-history fields.
+- Added a Diagnostic Report tab to doctor Patient Search results.
+- The tab shows the selected patient's latest saved General Diagnostics report.
+- Added PDF download for the patient's latest report.
+- Latest reports are linked by patient User ID and stored in diagnostic_reports_data.json.
+- No colors, layouts, models, authentication rules, or unrelated functionality were changed.

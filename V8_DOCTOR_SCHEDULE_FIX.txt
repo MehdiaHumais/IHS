@@ -1,0 +1,31 @@
+DOCTOR SCHEDULE V8
+
+Why V8 exists
+-------------
+The screenshot that still says:
+    "No appointments on file yet."
+cannot be produced by the V7 index.html. V7 removed that exact text.
+
+That means an older chatbot HTML/server was still being rendered.
+
+V8 prevents that in four ways:
+1. New backend/UI build id: doctor-schedule-v8.
+2. All chatbot HTML/API responses send Cache-Control: no-store.
+3. The Streamlit iframe URL includes the build id, forcing a new URL.
+4. The frontend verifies /api/health matches its own UI build before loading.
+
+How to verify
+-------------
+If a doctor's schedule is genuinely empty in V8, the screen says:
+    "No appointments assigned to <doctor> yet. [V8]"
+
+If you still see:
+    "No appointments on file yet."
+you are NOT running the V8 folder.
+
+V8 retains the V7 appointment fixes:
+- canonical doctor user_id persisted on booking
+- doctor_name persisted
+- fresh Google Sheets schedule reads
+- legacy doctor name/id matching
+- read-after-write appointment verification

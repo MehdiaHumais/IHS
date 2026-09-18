@@ -1,0 +1,15 @@
+Clinical Chatbot fast-start fix
+
+Changes in this build:
+- The FastAPI chatbot no longer contacts Google Sheets during module import.
+- The embedded chatbot UI paints immediately instead of staying hidden while patient/doctor records initialize.
+- Health checks have short timeouts.
+- Patient/doctor initialization has an 8-second browser timeout instead of waiting indefinitely.
+- The host app skips HTTP probes for unused chatbot ports and starts the bundled server immediately.
+- Build id changed to fast-start-v9 so stale V8 chatbot processes are not embedded accidentally.
+
+Important:
+An "invalid_grant: Invalid JWT Signature" response is a Google credential rejection.
+Code cannot reactivate a deleted/rotated Google private key. This build prevents that
+credential problem from freezing the chatbot interface, but Google-Sheets-backed
+operations still require an active service-account key that has access to the configured sheet.

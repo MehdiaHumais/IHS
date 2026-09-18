@@ -1,0 +1,4 @@
+Doctor dashboard update
+=======================
+- Doctors continue to see the Search Patient block.
+- Doctors now also see the Brain Stroke Diagnosis block on the main dashboard.

@@ -1,0 +1,6 @@
+Updates:
+1. The User type selector is present on both Log in and Sign up screens.
+2. RUN_SMART_CDSS.bat installs packages only during the first successful setup.
+3. Later launches reuse the local .venv and skip package installation.
+4. Fixed Sign up layout: User type is now inside the same white form card.
+5. Added robust borders/backgrounds for all authentication inputs.

@@ -1,0 +1,17 @@
+IHS LOGIN ACCOUNT MIGRATION FIX
+
+This build fixes the case where an existing username/password stopped working
+after authentication was moved from "User Registration Responses" to "Users".
+
+What changed:
+- Login checks the current "Users" worksheet first.
+- If no account is found, it also checks older account worksheets:
+  "User Registration Responses", "Form Responses 1", and "Form Responses".
+- Legacy sheets are only accepted when they contain password_hash and
+  password_salt, so plaintext Google Form passwords are never trusted.
+- After a legacy password is successfully verified, that account is
+  automatically copied into the current "Users" worksheet.
+- A missing legacy user_id is generated automatically.
+- Existing password hashes are preserved; the password is never exposed.
+
+Run the app from a NEW extracted folder using RUN_APP.bat.

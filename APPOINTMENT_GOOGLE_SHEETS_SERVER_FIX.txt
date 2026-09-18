@@ -1,0 +1,44 @@
+SMART CDSS - Appointment / Google Sheets / Server Fix
+
+Build: appointments-sheets-server-v3
+
+What was fixed
+1. The Streamlit host now verifies the exact bundled FastAPI chatbot build instead
+   of accepting any process that happens to be listening on port 8000. If an old
+   chatbot process is still running, the host automatically starts this build on
+   the next free local port and embeds that port.
+2. FastAPI now exposes /api/health with a build identifier.
+3. Google Sheets can reconnect after a transient startup/network failure. A failed
+   connection no longer permanently poisons the running server.
+4. Chatbot-owned sheets (appointments, doctors, staff, otc_medications) self-heal
+   when missing. Existing worksheet names are matched case-insensitively, so an
+   existing "Appointments" tab is reused instead of creating a disconnected
+   lowercase duplicate.
+5. Appointment reads use a tolerant header mapper so hand-edited/legacy sheets
+   with extra or duplicate columns do not crash gspread.get_all_records().
+6. Appointments are appended directly to the configured Google spreadsheet using
+   the exact selected registered doctor's doctor_id. The doctor's schedule reads
+   those same rows, so a newly booked appointment is visible to that doctor.
+7. Registration remains the source of truth for doctors. Any account registered
+   as Doctor/Clinician/Physician in the supported registration sheets can be
+   selected and booked.
+8. A registered doctor with no explicitly configured clinic hours is bookable at
+   the patient's selected future time. Working-hour restrictions are only
+   enforced when hours are actually configured in the doctors worksheet.
+9. The chatbot server now writes startup/runtime output to
+   clinical_chatbot/chatbot_server.log so connection problems can be diagnosed.
+
+Google Sheets requirements
+- google_config.json and clinical_chatbot/.env must point to the same spreadsheet.
+- The spreadsheet must be shared with the client_email in service_account.json
+  with Editor access.
+- The service account needs Google Sheets and Drive API access.
+- The app automatically creates/upgrades the appointments worksheet headers.
+
+Appointment worksheet columns
+appointment_id, patient_id, doctor_id, specialist, date, duration_minutes,
+status, reason, consultation_mode, contact_phone, created_at
+
+Run
+- Install requirements.txt
+- Start with RUN_APP.bat / run_app.bat on Windows or run_app.sh on Linux/macOS.

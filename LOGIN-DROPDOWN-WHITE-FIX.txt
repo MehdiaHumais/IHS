@@ -1,0 +1,8 @@
+Login dropdown visual update
+============================
+- Changed the User type select box to a white background.
+- Added a light gray border and soft shadow.
+- Kept the selected text and dropdown arrow dark.
+- Made the dropdown menu and options white.
+- Added a light gray hover/selected state.
+- Preserved the existing login functionality.

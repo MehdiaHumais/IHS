@@ -1,0 +1,63 @@
+SMART AI DASHBOARD — GOOGLE SHEETS SIGNUP/LOGIN SETUP
+
+IMPORTANT
+Google Forms is useful for collecting survey information, but it should not be
+used to save login passwords. This version uses a signup form inside Streamlit
+and saves accounts in a Google Sheet. After signup, the user is logged in
+automatically.
+
+You may use the same spreadsheet already connected to your Google Form.
+The app creates a separate worksheet named "Users". Do not use the
+"Form Responses" worksheet for passwords.
+
+STEP 1 — PREPARE THE GOOGLE SHEET
+1. Open the Google Sheet linked with your Google Form, or create a new Sheet.
+2. Copy the spreadsheet ID from its URL:
+   https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
+3. Open google_config.json.
+4. Replace PASTE_YOUR_SPREADSHEET_ID_HERE with the copied ID.
+5. Keep worksheet_name as Users.
+
+STEP 2 — CREATE GOOGLE CLOUD CREDENTIALS
+1. Open Google Cloud Console and create or select a project.
+2. Open APIs & Services > Library.
+3. Enable Google Sheets API.
+4. Enable Google Drive API.
+5. Open IAM & Admin > Service Accounts.
+6. Create a service account.
+7. Open that service account > Keys > Add key > Create new key > JSON.
+8. Download the JSON key.
+9. Rename the downloaded file to:
+   service_account.json
+10. Put service_account.json in the same folder as app.py.
+
+STEP 3 — SHARE THE SHEET
+1. Open service_account.json in Notepad.
+2. Copy the value beside "client_email".
+3. Open your Google Sheet and press Share.
+4. Add that service-account email as Editor.
+
+STEP 4 — RUN THE APP
+Keep these files in one folder:
+- app.py
+- run_app.bat
+- requirements.txt
+- google_config.json
+- service_account.json
+- saved_sentence_bert_model folder, if you already have it
+
+Double-click run_app.bat.
+
+HOW IT WORKS
+- New user opens the Sign up tab.
+- The app checks duplicate email and username.
+- It saves user information in the Users worksheet.
+- The password is saved as a PBKDF2 hash and salt, not as plain text.
+- The app logs the new user in immediately.
+- Later, the user can log in using username/email and password.
+
+SECURITY
+Never upload service_account.json to GitHub or send it to another person.
+This account system is suitable for a local university project/demo. For a
+public production medical application, use a managed authentication service
+such as Firebase Authentication, Auth0, or Google OpenID Connect.

@@ -1,0 +1,24 @@
+CLINICAL CHATBOT GOOGLE SHEETS AUTH FIX
+
+Problem
+-------
+The chatbot had its own service_account.json and database.py preferred that
+chatbot-local key over the project-root credential. The two files are different
+Google service-account keys for the same account. The chatbot-local key is being
+rejected by Google with:
+    invalid_grant: Invalid JWT Signature.
+
+Fix
+---
+clinical_chatbot/database.py now prefers:
+    IHS/service_account.json
+and only falls back to:
+    IHS/clinical_chatbot/service_account.json
+when the root credential is not present.
+
+This keeps the chatbot on the same Google credential used by the main SMART CDSS
+registration/login flow. No UI, chatbot behavior, models, routes, or other project
+features were changed.
+
+After updating, fully stop the old Streamlit/FastAPI processes before restarting
+the app so the stale chatbot process does not keep the old credential in memory.

@@ -1,0 +1,10 @@
+Logged-in patient linking update
+
+Changes:
+- Brain Stroke Diagnosis now automatically uses the logged-in user's name, age, and gender.
+- Heart Disease Diagnosis now automatically uses the logged-in user's age and sex and displays the linked account identity.
+- General Diagnostics now automatically uses the logged-in user's patient ID, name, age, and gender.
+- Linked identity fields are read-only so an assessment cannot accidentally be recorded for a different person.
+- No model, prediction logic, interface colors, or layout styling was changed.
+
+Users should complete their Profile first so age and gender are available.
