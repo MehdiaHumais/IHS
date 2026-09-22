@@ -219,10 +219,14 @@ def _materialize_cloud_files() -> None:
     if isinstance(google_config, dict):
         _write_payload(BASE_DIR / "google_config.json", google_config)
 
-    # Environment-variable fallback (works with Vercel/Railway/Heroku too).
+    # Environment-variable fallback (works with Vercel/Railway/Heroku/Spaces).
     env_service_account = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
     if env_service_account and not (BASE_DIR / "service_account.json").exists():
         _write_payload(BASE_DIR / "service_account.json", env_service_account)
+
+    env_google_config = os.environ.get("GOOGLE_CONFIG_JSON", "")
+    if env_google_config and not (BASE_DIR / "google_config.json").exists():
+        _write_payload(BASE_DIR / "google_config.json", env_google_config)
 
 
 _materialize_cloud_files()
