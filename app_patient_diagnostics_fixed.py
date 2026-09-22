@@ -183,6 +183,61 @@ SERVICE_ACCOUNT_FILE = _resolve_service_account_file()
 GOOGLE_CONFIG_FILE = BASE_DIR / "google_config.json"
 
 
+def _materialize_cloud_files() -> None:
+    """
+    Streamlit Community Cloud has no persistent disk and this repository keeps
+    the Google credentials out of git. When the app runs on the cloud the
+    operator pastes those files into the Streamlit secrets editor. Materialize
+    them onto disk here so the Google Sheets login keeps working unchanged.
+
+    The desktop edition is unaffected: when the files already exist locally,
+    this function does nothing.
+    """
+    try:
+        secrets = getattr(st, "secrets", None) or {}
+    except Exception:
+        secrets = {}
+
+    def _write_payload(path: Path, payload: object) -> None:
+        if path.exists():
+            return
+        text = (
+            payload
+            if isinstance(payload, str)
+            else json.dumps(payload, indent=2)
+        )
+        try:
+            path.write_text(text, encoding="utf-8")
+        except OSError:
+            pass
+
+    service_account = secrets.get("service_account")
+    if isinstance(service_account, dict):
+        _write_payload(BASE_DIR / "service_account.json", service_account)
+
+    google_config = secrets.get("google_config")
+    if isinstance(google_config, dict):
+        _write_payload(BASE_DIR / "google_config.json", google_config)
+
+    # Environment-variable fallback (works with Vercel/Railway/Heroku too).
+    env_service_account = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    if env_service_account and not (BASE_DIR / "service_account.json").exists():
+        _write_payload(BASE_DIR / "service_account.json", env_service_account)
+
+
+_materialize_cloud_files()
+
+# Hosted (Streamlit Cloud) mode: some pages spawn local companion servers and
+# embed them with iframes to 127.0.0.1. That cannot work in a hosted build, so
+# those pages show a clear notice instead. Set app.cloud=true in Streamlit
+# secrets (or the CLOUD_DEPLOY env variable) to enable this behaviour.
+CLOUD_DEPLOY = bool(
+    os.environ.get("CLOUD_DEPLOY", "").strip().lower()
+    in {"1", "true", "yes", "on"}
+    or bool((getattr(st, "secrets", None) or {}).get("app", {}).get("cloud", False))
+)
+
+
 # Supplied Heart Disease Diagnosis model and dataset.
 HEART_DISEASE_DATA_FILE = (
     BASE_DIR / "heart_disease" / "cleaned_merged_heart_dataset.csv"
@@ -3455,8 +3510,12 @@ def dashboard_page() -> None:
             "Multi-agent diagnostic assistant with medication, safety, and readmission analysis.",
             ready=True,
         )
+        # On hosted builds the embedded diagnostic Station is replaced by the
+        # in-process Full Diagnostics page; the desktop launcher keeps the
+        # original bundled sub-application.
+        route = "general_diagnostics" if CLOUD_DEPLOY else "agentic_diagnostic"
         if st.button("Open Full Diagnostics Scan", key="open_agentic_diagnostic", use_container_width=True):
-            st.session_state.active_page = "agentic_diagnostic"
+            st.session_state.active_page = route
             st.rerun()
 
     # Full Diagnostics Scan is available to both Patient and Doctor accounts.
@@ -4395,6 +4454,14 @@ def agentic_diagnostic_page() -> None:
         st.session_state.active_page = "dashboard"
         st.rerun()
 
+    if CLOUD_DEPLOY:
+        st.info(
+            "The Full Diagnostics / Agentic Scan runs as a bundled local Streamlit "
+            "service in the desktop version (RUN_SMART_CDSS.bat) and is not "
+            "available in this hosted cloud build."
+        )
+        return
+
     running, error_message, agentic_port = _ensure_agentic_diagnostic_server()
     if not running:
         st.error("The Agentic Diagnostic interface could not be loaded.")
@@ -4538,6 +4605,15 @@ def clinical_chatbot_page() -> None:
     if st.button("← Back to dashboard", key="chatbot_back_dashboard"):
         st.session_state.active_page = "dashboard"
         st.rerun()
+
+    if CLOUD_DEPLOY:
+        st.info(
+            "The Clinical Chatbot runs as a local companion service in the desktop "
+            "version of SMART Clinic (RUN_SMART_CDSS.bat). It launches a bundled "
+            "FastAPI server on your machine and is therefore not available in this "
+            "hosted cloud build."
+        )
+        return
 
     running, error_message, chatbot_port = _ensure_clinical_chatbot_server()
     if not running:
