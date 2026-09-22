@@ -221,6 +221,42 @@ def _credential_payloads() -> dict[str, object]:
     return payloads
 
 
+def _cloud_service_account_info() -> dict | None:
+    """Return an in-memory Google service-account dict taken from Streamlit
+    secrets or the environment, without touching the filesystem.
+
+    This is what makes the hosted build work: Streamlit Community Cloud runs a
+    read-only app folder, so a secret-backed dict (pasted in the secrets editor)
+    is converted straight into google.auth credentials.
+    """
+    try:
+        secrets = getattr(st, "secrets", None) or {}
+    except Exception:
+        secrets = {}
+
+    candidates: list[object] = []
+    service_account = secrets.get("service_account")
+    if service_account:
+        candidates.append(service_account)
+    plain_secret = secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if isinstance(plain_secret, str) and plain_secret.strip():
+        candidates.append(plain_secret)
+    env_payload = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    if env_payload.strip():
+        candidates.append(env_payload)
+
+    for candidate in candidates:
+        info = candidate
+        if isinstance(info, str):
+            try:
+                info = json.loads(info)
+            except (json.JSONDecodeError, TypeError):
+                continue
+        if isinstance(info, dict) and info.get("client_email") and info.get("private_key"):
+            return info
+    return None
+
+
 def _materialize_cloud_files() -> None:
     """
     Streamlit Community Cloud has no persistent disk and has a read-only app
@@ -1544,54 +1580,64 @@ def get_users_worksheet():
         "https://www.googleapis.com/auth/drive",
     ]
 
-    # This desktop version must use the JSON file beside app.py.
-    # Do not silently fall back to Streamlit secrets because that can
-    # produce the misleading "service account info" missing-fields error.
-    if not SERVICE_ACCOUNT_FILE.exists():
-        files_in_app_folder = ", ".join(
-            sorted(path.name for path in BASE_DIR.iterdir())
-        )
-        secret_names: list[str] = []
+    # Hosted build: the read-only folder cannot hold the credential file, so
+    # build the credentials straight from the secret dict when available.
+    # The desktop build prefers the JSON file beside app.py; the dict and the
+    # file paths are equivalent, so preferring the file keeps every desktop
+    # behaviour identical.
+    credentials = None
+    service_account_info = _cloud_service_account_info()
+    if not service_account_info and SERVICE_ACCOUNT_FILE.exists():
         try:
-            items = list(getattr(st.secrets, "items", lambda: [])())
-            secret_names = sorted(str(key) for key, _ in items)
-        except Exception:
-            secret_names = []
-        env_flags = {
-            key: bool(os.environ.get(key))
-            for key in (
-                "CLOUD_DEPLOY",
-                "GOOGLE_SERVICE_ACCOUNT_FILE",
-                "GOOGLE_SERVICE_ACCOUNT_JSON",
-                "GOOGLE_CONFIG_JSON",
+            credentials = Credentials.from_service_account_file(
+                str(SERVICE_ACCOUNT_FILE),
+                scopes=scopes,
             )
-        }
-        raise FileNotFoundError(
-            "No Google service-account key could be found.\n"
-            f"Checked: {BASE_DIR / 'service_account.json'}\n"
-            f"Also checked: {BASE_DIR / 'clinical_chatbot' / 'service_account.json'}\n"
-            "You may also set GOOGLE_SERVICE_ACCOUNT_FILE to the key path.\n"
-            f"App being executed: {Path(__file__).resolve()}\n"
-            f"Files found in that folder: {files_in_app_folder}\n"
-            "Streamlit secrets keys present: "
-            + (", ".join(secret_names) if secret_names else "(none detected)")
-            + "\n"
-            "Env presence: "
-            + ", ".join(f"{key}={flag}" for key, flag in env_flags.items())
-        )
-
-    try:
-        credentials = Credentials.from_service_account_file(
-            str(SERVICE_ACCOUNT_FILE),
-            scopes=scopes,
-        )
-    except Exception as error:
-        raise ValueError(
-            "The service-account file was found, but Google could not "
-            "read it.\n"
-            f"File being used: {SERVICE_ACCOUNT_FILE}\n"
-            f"Original error: {error}"
-        ) from error
+        except Exception as error:
+            raise ValueError(
+                "The service-account file was found, but Google could not "
+                "read it.\n"
+                f"File being used: {SERVICE_ACCOUNT_FILE}\n"
+                f"Original error: {error}"
+            ) from error
+    else:
+        if service_account_info:
+            credentials = Credentials.from_service_account_info(
+                service_account_info,
+                scopes=scopes,
+            )
+        else:
+            files_in_app_folder = ", ".join(
+                sorted(path.name for path in BASE_DIR.iterdir())
+            )
+            secret_names: list[str] = []
+            try:
+                items = list(getattr(st.secrets, "items", lambda: [])())
+                secret_names = sorted(str(key) for key, _ in items)
+            except Exception:
+                secret_names = []
+            env_flags = {
+                key: bool(os.environ.get(key))
+                for key in (
+                    "CLOUD_DEPLOY",
+                    "GOOGLE_SERVICE_ACCOUNT_FILE",
+                    "GOOGLE_SERVICE_ACCOUNT_JSON",
+                    "GOOGLE_CONFIG_JSON",
+                )
+            }
+            raise FileNotFoundError(
+                "No Google service-account key could be found.\n"
+                f"Checked: {BASE_DIR / 'service_account.json'}\n"
+                f"Also checked: {BASE_DIR / 'clinical_chatbot' / 'service_account.json'}\n"
+                "You may also set GOOGLE_SERVICE_ACCOUNT_FILE to the key path.\n"
+                f"App being executed: {Path(__file__).resolve()}\n"
+                f"Files found in that folder: {files_in_app_folder}\n"
+                "Streamlit secrets keys present: "
+                + (", ".join(secret_names) if secret_names else "(none detected)")
+                + "\n"
+                "Env presence: "
+                + ", ".join(f"{key}={flag}" for key, flag in env_flags.items())
+            )
 
     client = gspread.authorize(credentials)
     spreadsheet_id, worksheet_name = read_google_sheet_settings()
@@ -1607,9 +1653,15 @@ def get_users_worksheet():
         ) from error
     except (gspread.exceptions.APIError, PermissionError) as error:
         # Provide a clearer message when Google returns a 403 / permission error
+        client_email = None
         try:
-            sa_info = json.loads(SERVICE_ACCOUNT_FILE.read_text(encoding="utf-8"))
-            client_email = sa_info.get("client_email")
+            sa_info = _cloud_service_account_info()
+            if not sa_info and SERVICE_ACCOUNT_FILE.exists():
+                sa_info = json.loads(
+                    SERVICE_ACCOUNT_FILE.read_text(encoding="utf-8")
+                )
+            if sa_info:
+                client_email = sa_info.get("client_email")
         except Exception:
             client_email = None
 
