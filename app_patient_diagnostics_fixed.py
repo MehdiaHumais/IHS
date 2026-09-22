@@ -8,6 +8,7 @@ import sys
 import threading
 import subprocess
 import socket
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -183,59 +184,79 @@ SERVICE_ACCOUNT_FILE = _resolve_service_account_file()
 GOOGLE_CONFIG_FILE = BASE_DIR / "google_config.json"
 
 
-def _materialize_cloud_files() -> None:
-    """
-    Streamlit Community Cloud has no persistent disk and this repository keeps
-    the Google credentials out of git. When the app runs on the cloud the
-    operator pastes those files into the Streamlit secrets editor. Materialize
-    them onto disk here so the Google Sheets login keeps working unchanged.
-
-    The desktop edition is unaffected: when the files already exist locally,
-    this function does nothing.
-    """
+def _credential_payloads() -> dict[str, object]:
+    """Collect the Google credentials from Streamlit secrets (any supported
+    shape) or from process environment variables. Returns filename -> payload."""
     try:
         secrets = getattr(st, "secrets", None) or {}
     except Exception:
         secrets = {}
 
-    def _write_payload(path: Path, payload: object) -> None:
-        if path.exists():
-            return
-        text = (
-            payload
-            if isinstance(payload, str)
-            else json.dumps(payload, indent=2)
-        )
-        try:
-            path.write_text(text, encoding="utf-8")
-        except OSError:
-            pass
+    payloads: dict[str, object] = {}
 
     service_account = secrets.get("service_account")
     if isinstance(service_account, dict):
-        _write_payload(BASE_DIR / "service_account.json", service_account)
-
+        payloads["service_account.json"] = service_account
     google_config = secrets.get("google_config")
     if isinstance(google_config, dict):
-        _write_payload(BASE_DIR / "google_config.json", google_config)
+        payloads["google_config.json"] = google_config
 
-    # Environment-variable / plain-string fallback (works on Streamlit Cloud,
-    # Vercel, Railway, Heroku and HF Spaces). Both process environment
+    # Environment-variable / plain-string fallback. Both process environment
     # variables and TOML-scalar secrets are accepted so the operator never has
     # to hand-convert the JSON into nested sections.
     env_service_account = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "") or ""
     plain_secret_account = secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
     if isinstance(plain_secret_account, str):
         env_service_account = env_service_account or plain_secret_account
-    if env_service_account and not (BASE_DIR / "service_account.json").exists():
-        _write_payload(BASE_DIR / "service_account.json", env_service_account)
+    if env_service_account:
+        payloads.setdefault("service_account.json", env_service_account)
 
     env_google_config = os.environ.get("GOOGLE_CONFIG_JSON", "") or ""
     plain_secret_config = secrets.get("GOOGLE_CONFIG_JSON")
     if isinstance(plain_secret_config, str):
         env_google_config = env_google_config or plain_secret_config
-    if env_google_config and not (BASE_DIR / "google_config.json").exists():
-        _write_payload(BASE_DIR / "google_config.json", env_google_config)
+    if env_google_config:
+        payloads.setdefault("google_config.json", env_google_config)
+
+    return payloads
+
+
+def _materialize_cloud_files() -> None:
+    """
+    Streamlit Community Cloud has no persistent disk and has a read-only app
+    directory, and this repository keeps the Google credentials out of git.
+    When the app runs on the cloud the operator pastes those files into the
+    Streamlit secrets editor. Materialize them into a writable location here so
+    the Google Sheets login keeps working unchanged.
+
+    The desktop edition is unaffected: when the files already exist locally,
+    this function does nothing.
+    """
+    temp_dir = Path(tempfile.gettempdir())
+    for file_name, payload in _credential_payloads().items():
+        base_path = BASE_DIR / file_name
+        if base_path.exists():
+            continue
+        text = payload if isinstance(payload, str) else json.dumps(payload, indent=2)
+
+        bound_path = base_path
+        try:
+            base_path.parent.mkdir(parents=True, exist_ok=True)
+            base_path.write_text(text, encoding="utf-8")
+        except OSError:
+            # Read-only application folder (Streamlit Community Cloud): fall
+            # back to the container temp directory, which is always writable.
+            bound_path = temp_dir / file_name
+            try:
+                bound_path.write_text(text, encoding="utf-8")
+            except OSError:
+                continue
+
+        if file_name == "service_account.json":
+            globals()["SERVICE_ACCOUNT_FILE"] = bound_path
+            os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"] = str(bound_path)
+        else:
+            globals()["GOOGLE_CONFIG_FILE"] = bound_path
 
 
 _materialize_cloud_files()
