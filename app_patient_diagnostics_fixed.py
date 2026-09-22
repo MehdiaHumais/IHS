@@ -194,12 +194,28 @@ def _credential_payloads() -> dict[str, object]:
 
     payloads: dict[str, object] = {}
 
-    service_account = secrets.get("service_account")
-    if isinstance(service_account, dict):
-        payloads["service_account.json"] = service_account
-    google_config = secrets.get("google_config")
-    if isinstance(google_config, dict):
-        payloads["google_config.json"] = google_config
+    disk = _secrets_from_disk_toml()
+    disk_sa = disk.get("service_account")
+    if isinstance(disk_sa, dict):
+        payloads.setdefault("service_account.json", disk_sa)
+    disk_gc = disk.get("google_config")
+    if isinstance(disk_gc, dict):
+        payloads.setdefault("google_config.json", disk_gc)
+
+    def _coerce(value: object) -> dict | None:
+        if value is None:
+            return None
+        try:
+            return dict(value)
+        except Exception:
+            return None
+
+    service_account = _coerce(secrets.get("service_account"))
+    if service_account:
+        payloads.setdefault("service_account.json", service_account)
+    google_config = _coerce(secrets.get("google_config"))
+    if google_config:
+        payloads.setdefault("google_config.json", google_config)
 
     # Environment-variable / plain-string fallback. Both process environment
     # variables and TOML-scalar secrets are accepted so the operator never has
@@ -221,6 +237,33 @@ def _credential_payloads() -> dict[str, object]:
     return payloads
 
 
+def _secrets_from_disk_toml() -> dict:
+    """Read the Streamlit secrets file directly and parse it as TOML.
+
+    Streamlit Cloud stores the secrets the operator pastes into the dashboard
+    at ``~/.streamlit/secrets.toml`` inside the container's writable home
+    directory. Reading that file with tomllib avoids every quirk of the
+    ``st.secrets`` proxy object (which does not behave like a plain dict for
+    nested sections in every Streamlit version).
+    """
+    try:
+        import tomllib  # type: ignore[import-not-found]  # Python 3.11+
+    except ImportError:
+        try:
+            import tomli as tomllib  # type: ignore[no-redef]
+        except ImportError:
+            return {}
+    try:
+        path = Path.home() / ".streamlit" / "secrets.toml"
+        if not path.exists():
+            return {}
+        with path.open("rb") as handle:
+            data = tomllib.load(handle)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
 def _cloud_service_account_info() -> dict | None:
     """Return an in-memory Google service-account dict taken from Streamlit
     secrets or the environment, without touching the filesystem.
@@ -229,15 +272,26 @@ def _cloud_service_account_info() -> dict | None:
     read-only app folder, so a secret-backed dict (pasted in the secrets editor)
     is converted straight into google.auth credentials.
     """
+    disk = _secrets_from_disk_toml()
+    sa = disk.get("service_account")
+    if isinstance(sa, dict) and sa.get("client_email") and sa.get("private_key"):
+        return sa
+
     try:
         secrets = getattr(st, "secrets", None) or {}
     except Exception:
         secrets = {}
 
+    sa = secrets.get("service_account")
+    if sa:
+        try:
+            sa = dict(sa)
+        except Exception:
+            sa = None
+        if isinstance(sa, dict) and sa.get("client_email") and sa.get("private_key"):
+            return sa
+
     candidates: list[object] = []
-    service_account = secrets.get("service_account")
-    if service_account:
-        candidates.append(service_account)
     plain_secret = secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
     if isinstance(plain_secret, str) and plain_secret.strip():
         candidates.append(plain_secret)
