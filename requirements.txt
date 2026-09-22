@@ -27,6 +27,7 @@ pydantic>=2.7
 python-dotenv>=1.0
 python-dateutil>=2.9
 python-multipart>=0.0.9
+tomli>=2.0; python_version < "3.11"
 requests>=2.32
 rapidfuzz>=3.9
 langchain-core>=0.3
