@@ -26,6 +26,9 @@ logs/
 *.joblib
 *.h5
 *.onnx
+# The two diagnostic models are required for the Streamlit Cloud deployment.
+!breast_cancer/model/breast_cancer_model.joblib
+!stroke_agent/stroke_model.pkl
 
 # --- Misc ---
 .DS_Store
