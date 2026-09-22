@@ -219,12 +219,21 @@ def _materialize_cloud_files() -> None:
     if isinstance(google_config, dict):
         _write_payload(BASE_DIR / "google_config.json", google_config)
 
-    # Environment-variable fallback (works with Vercel/Railway/Heroku/Spaces).
-    env_service_account = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    # Environment-variable / plain-string fallback (works on Streamlit Cloud,
+    # Vercel, Railway, Heroku and HF Spaces). Both process environment
+    # variables and TOML-scalar secrets are accepted so the operator never has
+    # to hand-convert the JSON into nested sections.
+    env_service_account = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "") or ""
+    plain_secret_account = secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if isinstance(plain_secret_account, str):
+        env_service_account = env_service_account or plain_secret_account
     if env_service_account and not (BASE_DIR / "service_account.json").exists():
         _write_payload(BASE_DIR / "service_account.json", env_service_account)
 
-    env_google_config = os.environ.get("GOOGLE_CONFIG_JSON", "")
+    env_google_config = os.environ.get("GOOGLE_CONFIG_JSON", "") or ""
+    plain_secret_config = secrets.get("GOOGLE_CONFIG_JSON")
+    if isinstance(plain_secret_config, str):
+        env_google_config = env_google_config or plain_secret_config
     if env_google_config and not (BASE_DIR / "google_config.json").exists():
         _write_payload(BASE_DIR / "google_config.json", env_google_config)
 
@@ -1521,13 +1530,33 @@ def get_users_worksheet():
         files_in_app_folder = ", ".join(
             sorted(path.name for path in BASE_DIR.iterdir())
         )
+        secret_names: list[str] = []
+        try:
+            items = list(getattr(st.secrets, "items", lambda: [])())
+            secret_names = sorted(str(key) for key, _ in items)
+        except Exception:
+            secret_names = []
+        env_flags = {
+            key: bool(os.environ.get(key))
+            for key in (
+                "CLOUD_DEPLOY",
+                "GOOGLE_SERVICE_ACCOUNT_FILE",
+                "GOOGLE_SERVICE_ACCOUNT_JSON",
+                "GOOGLE_CONFIG_JSON",
+            )
+        }
         raise FileNotFoundError(
             "No Google service-account key could be found.\n"
             f"Checked: {BASE_DIR / 'service_account.json'}\n"
             f"Also checked: {BASE_DIR / 'clinical_chatbot' / 'service_account.json'}\n"
             "You may also set GOOGLE_SERVICE_ACCOUNT_FILE to the key path.\n"
             f"App being executed: {Path(__file__).resolve()}\n"
-            f"Files found in that folder: {files_in_app_folder}"
+            f"Files found in that folder: {files_in_app_folder}\n"
+            "Streamlit secrets keys present: "
+            + (", ".join(secret_names) if secret_names else "(none detected)")
+            + "\n"
+            "Env presence: "
+            + ", ".join(f"{key}={flag}" for key, flag in env_flags.items())
         )
 
     try:
