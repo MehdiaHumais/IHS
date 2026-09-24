@@ -1,5 +1,6 @@
 # --- Secrets: NEVER commit ---
 service_account.json
+service_account_old.json
 *.env
 .env
 .env.*
