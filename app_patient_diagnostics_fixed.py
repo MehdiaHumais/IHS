@@ -2354,7 +2354,7 @@ def login_page() -> None:
     with center:
         st.markdown("<h1 class='login-title'>Integrated Health Services (IHS) | Sehat Plus</h1>", unsafe_allow_html=True)
         st.markdown(
-            "<p class='login-subtitle'>Create an account first, then use the same username and password to log in.</p>",
+            "<p class='login-subtitle'>Sign in with the username and password issued by your clinic or administrator.</p>",
             unsafe_allow_html=True,
         )
 
@@ -2369,7 +2369,7 @@ def login_page() -> None:
                 st.code(sheet_error)
             st.stop()
 
-        login_tab, signup_tab = st.tabs(["Log in", "Sign up"])
+        login_tab, = st.tabs(["Log in"])
 
         with login_tab:
             with st.form("login_form", clear_on_submit=False):
@@ -2452,9 +2452,6 @@ def login_page() -> None:
                         st.error("Login could not be checked because Google Sheets is unavailable.")
                         with st.expander("Technical error"):
                             st.code(str(error))
-
-        with signup_tab:
-            render_signup_form("public_signup", auto_login=True)
 
 
         st.markdown("<div style='height: 0.35rem'></div>", unsafe_allow_html=True)
