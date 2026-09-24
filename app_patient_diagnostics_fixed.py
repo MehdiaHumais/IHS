@@ -355,11 +355,21 @@ _materialize_cloud_files()
 # embed them with iframes to 127.0.0.1. That cannot work in a hosted build, so
 # those pages show a clear notice instead. Set app.cloud=true in Streamlit
 # secrets (or the CLOUD_DEPLOY env variable) to enable this behaviour.
-CLOUD_DEPLOY = bool(
-    os.environ.get("CLOUD_DEPLOY", "").strip().lower()
-    in {"1", "true", "yes", "on"}
-    or bool((getattr(st, "secrets", None) or {}).get("app", {}).get("cloud", False))
-)
+def _read_cloud_deploy_flag() -> bool:
+    """Detect Streamlit Cloud deployment without raising when no secrets.toml exists."""
+    if os.environ.get("CLOUD_DEPLOY", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return True
+    try:
+        secrets = getattr(st, "secrets", None)
+        if secrets is not None:
+            app = secrets.get("app") or {}
+            return bool(app.get("cloud", False))
+    except Exception:
+        pass
+    return False
+
+
+CLOUD_DEPLOY = _read_cloud_deploy_flag()
 
 
 # Supplied Heart Disease Diagnosis model and dataset.
@@ -2359,7 +2369,7 @@ def login_page() -> None:
                 st.code(sheet_error)
             st.stop()
 
-        login_tab, = st.tabs(["Log in"])
+        login_tab, signup_tab = st.tabs(["Log in", "Sign up"])
 
         with login_tab:
             with st.form("login_form", clear_on_submit=False):
@@ -2442,6 +2452,9 @@ def login_page() -> None:
                         st.error("Login could not be checked because Google Sheets is unavailable.")
                         with st.expander("Technical error"):
                             st.code(str(error))
+
+        with signup_tab:
+            render_signup_form("public_signup", auto_login=True)
 
 
         st.markdown("<div style='height: 0.35rem'></div>", unsafe_allow_html=True)
@@ -3420,6 +3433,119 @@ def breast_cancer_diagnosis_page():
         st.markdown("</div>", unsafe_allow_html=True)
 
 
+def render_signup_form(widget_prefix: str, auto_login: bool = False) -> None:
+    """Render the shared account-creation form.
+
+    ``widget_prefix`` keeps Streamlit widget keys unique when the form is shown
+    more than once in the same script run (public login page + admin panel).
+    With ``auto_login`` the new account is signed in immediately.
+    """
+    with st.form(f"{widget_prefix}_form", clear_on_submit=False, border=True):
+        signup_user_type = st.selectbox(
+            "User type",
+            USER_TYPE_OPTIONS,
+            key=f"{widget_prefix}_user_type",
+        )
+
+        signup_other_user_type = ""
+        if signup_user_type == "Others":
+            signup_other_user_type = st.text_input(
+                "Specify user type",
+                placeholder="Enter your user type",
+                key=f"{widget_prefix}_other_user_type",
+            )
+
+        full_name = st.text_input(
+            "Full name",
+            placeholder="Enter your full name",
+            key=f"{widget_prefix}_full_name",
+        )
+        gender = st.selectbox(
+            "Gender",
+            ["Male", "Female", "Other", "Prefer not to say"],
+            key=f"{widget_prefix}_gender",
+        )
+        email = st.text_input(
+            "Email",
+            placeholder="name@example.com",
+            key=f"{widget_prefix}_email",
+        )
+        username = st.text_input(
+            "Choose username",
+            placeholder="Choose a username",
+            key=f"{widget_prefix}_username",
+        )
+        new_password = st.text_input(
+            "Choose password",
+            type="password",
+            placeholder="At least 6 characters",
+            key=f"{widget_prefix}_password",
+        )
+        confirm_password = st.text_input(
+            "Confirm password",
+            type="password",
+            placeholder="Write the password again",
+            key=f"{widget_prefix}_confirm_password",
+        )
+        signup_submitted = st.form_submit_button(
+            "Create account",
+            use_container_width=True,
+        )
+
+    if signup_submitted:
+        username_clean = normalize_username(username)
+
+        if not all([
+            full_name.strip(),
+            gender.strip(),
+            email.strip(),
+            username_clean,
+            new_password,
+            confirm_password,
+        ]):
+            st.warning("Please complete every field.")
+        elif signup_user_type == "Others" and not signup_other_user_type.strip():
+            st.warning("Please specify your user type.")
+        elif not valid_email(email):
+            st.warning("Enter a valid email address.")
+        elif not re.fullmatch(r"[a-z0-9_.-]{3,30}", username_clean):
+            st.warning(
+                "Username must be 3–30 characters and use only letters, numbers, _, . or -."
+            )
+        elif len(new_password) < 6:
+            st.warning("Password must contain at least 6 characters.")
+        elif new_password != confirm_password:
+            st.warning("The two passwords do not match.")
+        else:
+            try:
+                user = create_user(
+                    full_name,
+                    email,
+                    username_clean,
+                    new_password,
+                    signup_user_type,
+                    gender,
+                    signup_other_user_type,
+                )
+                if auto_login:
+                    save_login_session(user)
+                    update_last_login(user["user_id"])
+                    st.session_state.signup_user_id = user["user_id"]
+                    st.session_state.active_page = "dashboard"
+                    st.rerun()
+                else:
+                    st.success(
+                        f"Account created successfully. Your unique User ID is "
+                        f"**{user['user_id']}**."
+                    )
+            except ValueError as error:
+                st.warning(str(error))
+            except Exception as error:
+                st.error("The account could not be saved to Google Sheets.")
+                with st.expander("Technical error"):
+                    st.code(str(error))
+
+
 def admin_page() -> None:
     """Show administrators a single Sign up tab for creating user accounts."""
     top_navigation("")
@@ -3427,104 +3553,7 @@ def admin_page() -> None:
     signup_tab, = st.tabs(["Sign up"])
 
     with signup_tab:
-        # This is the same sign-up form shown on the front login window.
-        with st.form("admin_signup_form", clear_on_submit=False, border=True):
-            signup_user_type = st.selectbox(
-                "User type",
-                USER_TYPE_OPTIONS,
-                key="admin_signup_user_type",
-            )
-
-            signup_other_user_type = ""
-            if signup_user_type == "Others":
-                signup_other_user_type = st.text_input(
-                    "Specify user type",
-                    placeholder="Enter your user type",
-                    key="admin_signup_other_user_type",
-                )
-
-            full_name = st.text_input(
-                "Full name",
-                placeholder="Enter your full name",
-                key="admin_signup_full_name",
-            )
-            gender = st.selectbox(
-                "Gender",
-                ["Male", "Female", "Other", "Prefer not to say"],
-                key="admin_signup_gender",
-            )
-            email = st.text_input(
-                "Email",
-                placeholder="name@example.com",
-                key="admin_signup_email",
-            )
-            username = st.text_input(
-                "Choose username",
-                placeholder="Choose a username",
-                key="admin_signup_username",
-            )
-            new_password = st.text_input(
-                "Choose password",
-                type="password",
-                placeholder="At least 6 characters",
-                key="admin_signup_password",
-            )
-            confirm_password = st.text_input(
-                "Confirm password",
-                type="password",
-                placeholder="Write the password again",
-                key="admin_signup_confirm_password",
-            )
-            signup_submitted = st.form_submit_button(
-                "Create account",
-                use_container_width=True,
-            )
-
-        if signup_submitted:
-            username_clean = normalize_username(username)
-
-            if not all([
-                full_name.strip(),
-                gender.strip(),
-                email.strip(),
-                username_clean,
-                new_password,
-                confirm_password,
-            ]):
-                st.warning("Please complete every field.")
-            elif signup_user_type == "Others" and not signup_other_user_type.strip():
-                st.warning("Please specify your user type.")
-            elif not valid_email(email):
-                st.warning("Enter a valid email address.")
-            elif not re.fullmatch(r"[a-z0-9_.-]{3,30}", username_clean):
-                st.warning(
-                    "Username must be 3–30 characters and use only letters, numbers, _, . or -."
-                )
-            elif len(new_password) < 6:
-                st.warning("Password must contain at least 6 characters.")
-            elif new_password != confirm_password:
-                st.warning("The two passwords do not match.")
-            else:
-                try:
-                    user = create_user(
-                        full_name,
-                        email,
-                        username_clean,
-                        new_password,
-                        signup_user_type,
-                        gender,
-                        signup_other_user_type,
-                    )
-                    st.success(
-                        f"Account created successfully. Your unique User ID is "
-                        f"**{user['user_id']}**."
-                    )
-                except ValueError as error:
-                    st.warning(str(error))
-                except Exception as error:
-                    st.error("The account could not be saved to Google Sheets.")
-                    with st.expander("Technical error"):
-                        st.code(str(error))
+        render_signup_form("admin_signup", auto_login=False)
 
 
 def dashboard_page() -> None:
