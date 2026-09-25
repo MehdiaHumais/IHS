@@ -148,7 +148,16 @@ def _get_llm_chain():
     return _llm_chain_cache
 
 
-# --- REAL MCP CLIENT ---------------------------------------------------------
+# --- TOOLING -----------------------------------------------------------------
+# The ReAct agents below use named tools (get_patient_record, manage_appointment,
+# ...). Two transports can provide them:
+#   1. MCP stdio subprocess (default) - used by the standalone FastAPI chatbot.
+#   2. In-process direct wrappers - used when the host cannot spawn a reliable
+#      stdio MCP server (e.g. Streamlit Community Cloud), enabled with the
+#      CDSS_DIRECT_TOOLS environment variable. The underlying implementations
+#      are the very same mcp_tools functions, so agent behavior is unchanged.
+CDSS_DIRECT_TOOLS = os.environ.get("CDSS_DIRECT_TOOLS", "").strip().lower() in {"1", "true", "yes", "on"}
+
 _MCP_SERVER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_tools.py")
 
 _mcp_client = MultiServerMCPClient({
@@ -162,11 +171,69 @@ _medication_agents: dict = {}
 _appointment_agents: dict = {}
 
 
+def _build_direct_tools() -> list:
+    """Build the named tools the ReAct agents expect as in-process callables
+    instead of MCP stdio stubs. Every wrapper delegates to the exact function
+    the MCP server exports, keeping authorization and safety behavior intact."""
+    from langchain_core.tools import tool
+    from mcp_tools import (
+        get_patient_record as _mcp_get_patient_record,
+        check_medication_conflicts as _mcp_check_medication_conflicts,
+        update_patient_profile as _mcp_update_patient_profile,
+        manage_appointment as _mcp_manage_appointment,
+        find_available_doctor as _mcp_find_available_doctor,
+        get_doctor_schedule as _mcp_get_doctor_schedule,
+    )
+
+    @tool
+    def get_patient_record(patient_id: str, requester_patient_id: str, fields: Optional[list] = None) -> dict:
+        """Retrieves a patient's allergies, active medications, history, and today's visit context. requester_patient_id identifies who is asking; authorization is verified inside."""
+        return _mcp_get_patient_record(patient_id, requester_patient_id, fields)
+
+    @tool
+    def check_medication_conflicts(patient_id: str, medication_names: list) -> dict:
+        """Check candidate medication names against a patient's recorded allergies and current medications."""
+        return _mcp_check_medication_conflicts(patient_id, medication_names)
+
+    @tool
+    def update_patient_profile(patient_id: str, requester_patient_id: str, field: str, add_values: list) -> dict:
+        """Append new allergies or current medications to a patient's profile. field must be 'allergies' or 'current_medications'."""
+        return _mcp_update_patient_profile(patient_id, requester_patient_id, field, add_values)
+
+    @tool
+    def manage_appointment(action: str, patient_id: str, requester_patient_id: str, date: Optional[str] = None, specialist: Optional[str] = None, doctor_id: Optional[str] = None, appointment_id: Optional[str] = None, updates: Optional[dict] = None, reason: Optional[str] = None, consultation_mode: Optional[str] = None, contact_phone: Optional[str] = None) -> dict:
+        """Create, look up, update, or cancel an appointment. Role validation and schedule-conflict matching happen inside; requester_patient_id never grants elevation by itself."""
+        return _mcp_manage_appointment(action=action, patient_id=patient_id, requester_patient_id=requester_patient_id, date=date, specialist=specialist, doctor_id=doctor_id, appointment_id=appointment_id, updates=updates, reason=reason, consultation_mode=consultation_mode, contact_phone=contact_phone)
+
+    @tool
+    def find_available_doctor(specialty: str, date: str, duration_minutes: int = 30) -> dict:
+        """Find an available doctor matching a specialty for the given date."""
+        return _mcp_find_available_doctor(specialty, date, duration_minutes)
+
+    @tool
+    def get_doctor_schedule(doctor_id: str, requester_patient_id: str) -> dict:
+        """Get a doctor's schedule for upcoming appointments."""
+        return _mcp_get_doctor_schedule(doctor_id, requester_patient_id)
+
+    return [
+        get_patient_record,
+        check_medication_conflicts,
+        update_patient_profile,
+        manage_appointment,
+        find_available_doctor,
+        get_doctor_schedule,
+    ]
+
+
 async def _get_all_mcp_tools():
-    """Load MCP tools once, even when startup prewarming and a user request
+    """Load tools once, even when startup prewarming and a user request
     arrive at the same time."""
     global _all_mcp_tools_cache, _all_mcp_tools_task
     if _all_mcp_tools_cache is not None:
+        return _all_mcp_tools_cache
+
+    if CDSS_DIRECT_TOOLS:
+        _all_mcp_tools_cache = _build_direct_tools()
         return _all_mcp_tools_cache
 
     if _all_mcp_tools_task is None:

@@ -4785,54 +4785,12 @@ def _ensure_clinical_chatbot_server() -> tuple[bool, str, int]:
 
 
 def clinical_chatbot_page() -> None:
-    """Render the original chatbot UI inside SMART CDSS."""
-    top_navigation("Clinical Chatbot")
+    """Render the Clinical Chatbot as an in-process Streamlit page.
 
-    if st.button("← Back to dashboard", key="chatbot_back_dashboard"):
-        st.session_state.active_page = "dashboard"
-        st.rerun()
-
-    if CLOUD_DEPLOY:
-        st.info(
-            "The Clinical Chatbot runs as a local companion service in the desktop "
-            "version of SMART Clinic (RUN_SMART_CDSS.bat). It launches a bundled "
-            "FastAPI server on your machine and is therefore not available in this "
-            "hosted cloud build."
-        )
-        return
-
-    running, error_message, chatbot_port = _ensure_clinical_chatbot_server()
-    if not running:
-        st.error("The Clinical Chatbot interface could not be loaded.")
-        with st.expander("Technical error"):
-            st.code(error_message)
-        return
-
-    import streamlit.components.v1 as components
-    from urllib.parse import urlencode
-
-    current_user = st.session_state.get("current_user", {})
-    chatbot_params = {
-        "patient_id": clean_text(current_user.get("user_id")),
-        "name": clean_text(current_user.get("full_name")),
-    }
-    if current_user_is_doctor():
-        chatbot_params["role"] = "doctor"
-
-    # Include the backend build in the iframe URL. A new project build now
-    # produces a different URL, forcing the browser/Streamlit iframe to load
-    # the matching HTML instead of reusing a cached older chatbot page.
-    chatbot_params["build"] = CHATBOT_BUILD_ID
-    chatbot_url = (
-        f"http://127.0.0.1:{chatbot_port}/?"
-        + urlencode(chatbot_params)
-    )
-
-    components.iframe(
-        chatbot_url,
-        height=900,
-        scrolling=True,
-    )
+    The chatbot no longer depends on the bundled FastAPI companion server,
+    so the same interface works locally and in the hosted cloud build."""
+    from clinical_chatbot_streamlit import render_clinical_chatbot_page
+    render_clinical_chatbot_page()
 
 
 def brain_stroke_diagnosis_page() -> None:
