@@ -64,6 +64,11 @@ LLM_FALLBACK_ORDER = [
 ]
 
 
+# Kept modest so free/on-demand provider tiers (Groq OTPM, OpenRouter balance
+# remnants) accept every request instead of returning hard rejections.
+_LLM_MAX_OUTPUT_TOKENS = 900
+
+
 def _normalize_ollama_base_url(url: str) -> str:
     url = url.rstrip("/")
     if url.endswith("/v1"):
@@ -90,6 +95,10 @@ def _build_llm(provider: str):
             model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
             api_key=key,
             temperature=0,
+            # Free/on-demand Groq tiers enforce an output-tokens-per-minute
+            # (OTPM) cap (e.g. 1000) per request; keeping max_tokens safely
+            # under that limit avoids hard 429 rejections.
+            max_tokens=_LLM_MAX_OUTPUT_TOKENS,
         )
 
     if provider == "cerebras":
@@ -101,6 +110,7 @@ def _build_llm(provider: str):
             api_key=key,
             base_url="https://api.cerebras.ai/v1",
             temperature=0,
+            max_tokens=_LLM_MAX_OUTPUT_TOKENS,
         )
 
     if provider == "openrouter":
@@ -112,6 +122,9 @@ def _build_llm(provider: str):
             api_key=key,
             base_url="https://openrouter.ai/api/v1",
             temperature=0,
+            # Tight budget keeps requests inside the balance leftover on
+            # free-tier keys ("can only afford ~950 tokens" 402 errors).
+            max_tokens=_LLM_MAX_OUTPUT_TOKENS,
         )
 
 
@@ -123,6 +136,7 @@ def _build_llm(provider: str):
             model=os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite"),
             google_api_key=key,
             temperature=0,
+            max_output_tokens=_LLM_MAX_OUTPUT_TOKENS,
         )
     return None
 
