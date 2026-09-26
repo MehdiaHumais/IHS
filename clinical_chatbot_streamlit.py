@@ -1,4 +1,5 @@
 import asyncio
+import importlib.util
 import os
 import sys
 import tempfile
@@ -68,6 +69,22 @@ def _resolve_service_account_file() -> str:
     return ""
 
 
+def _load_chatbot_agents():
+    """Load clinical_chatbot/agents.py under a namespaced module name.
+
+    The chatbot file and the general_diagnostics agents package both want the
+    bare name ``agents``; registering ours as ``clinical_chatbot.agents`` keeps
+    ``sys.modules["agents"]`` free so the Full Diagnostics page imports the
+    correct package no matter which page ran first in the session."""
+    spec = importlib.util.spec_from_file_location(
+        "clinical_chatbot.agents", str(_CHATBOT_DIR / "agents.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def ensure_chatbot_ready() -> dict:
     global _cached
     if _cached is not None:
@@ -80,7 +97,7 @@ def ensure_chatbot_ready() -> dict:
         sys.path.insert(0, chatbot_dir)
     import database as cb_database
     import mcp_tools as cb_tools
-    import agents as cb_agents
+    cb_agents = _load_chatbot_agents()
     _cached = {
         "database": cb_database,
         "mcp_tools": cb_tools,
