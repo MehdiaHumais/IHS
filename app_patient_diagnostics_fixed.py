@@ -1835,6 +1835,208 @@ def get_patients_worksheet():
     return worksheet
 
 
+# ---------------------------------------------------------
+# Service subscriptions (payment records live in the shared
+# spreadsheet). Admins mark a service Active / Pending / Revoked
+# after verifying payment; the app then unlocks or blocks it for
+# the patient. A patient keeps working by default until a row
+# exists for their account, so no access regressions.
+# ---------------------------------------------------------
+PAYMENT_SHEET_NAME = "Payments"
+PAYMENT_HEADERS = [
+    "patient_id",
+    "patient_name",
+    "service",
+    "status",
+    "amount",
+    "payment_reference",
+    "verified_by",
+    "updated_at",
+]
+SERVICE_KEY_TO_LABEL = {
+    "clinical_chatbot": "Clinical Chatbot",
+    "full_diagnostics": "Full Diagnostics",
+    "brain_stroke": "Brain Stroke Diagnosis",
+    "heart_disease": "Heart Disease Diagnosis",
+    "breast_cancer": "Breast Cancer Diagnosis",
+}
+
+
+def _authorized_sheets_client():
+    """Return an authorized gspread client, or None when unavailable."""
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    service_account_info = _cloud_service_account_info()
+    if not service_account_info and SERVICE_ACCOUNT_FILE.exists():
+        try:
+            credentials = Credentials.from_service_account_file(
+                str(SERVICE_ACCOUNT_FILE), scopes=scopes
+            )
+            return gspread.authorize(credentials)
+        except Exception:
+            return None
+    if service_account_info:
+        try:
+            credentials = Credentials.from_service_account_info(
+                service_account_info, scopes=scopes
+            )
+            return gspread.authorize(credentials)
+        except Exception:
+            return None
+    return None
+
+
+@st.cache_resource(show_spinner=False)
+def get_payments_worksheet():
+    """Connect to (and create if needed) the Payments worksheet."""
+    import gspread
+
+    client = _authorized_sheets_client()
+    if client is None:
+        raise ValueError(
+            "Service records unavailable: no Google service-account credentials found."
+        )
+    spreadsheet_id, _ = read_google_sheet_settings()
+    spreadsheet = client.open_by_key(spreadsheet_id)
+    try:
+        worksheet = spreadsheet.worksheet(PAYMENT_SHEET_NAME)
+    except gspread.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(
+            title=PAYMENT_SHEET_NAME, rows=1000, cols=len(PAYMENT_HEADERS)
+        )
+    first_row = [clean_text(value) for value in worksheet.row_values(1)]
+    if not first_row:
+        worksheet.append_row(PAYMENT_HEADERS, value_input_option="RAW")
+    elif first_row != PAYMENT_HEADERS:
+        if first_row == PAYMENT_HEADERS[: len(first_row)]:
+            worksheet.resize(cols=len(PAYMENT_HEADERS))
+            for column_number, header in enumerate(
+                PAYMENT_HEADERS[len(first_row):],
+                start=len(first_row) + 1,
+            ):
+                worksheet.update_cell(1, column_number, header)
+        else:
+            raise ValueError(
+                f'The first row of the "{PAYMENT_SHEET_NAME}" worksheet must be: '
+                + ", ".join(PAYMENT_HEADERS)
+            )
+    return worksheet
+
+
+def list_service_subscriptions() -> list[dict[str, object]]:
+    """All service-subscription rows (data rows only). Never raises."""
+    rows: list[dict[str, object]] = []
+    try:
+        worksheet = get_payments_worksheet()
+        records = worksheet.get_all_records(value_render_option="FORMATTED_VALUE")
+    except Exception:
+        return rows
+    for index, record in enumerate(records, start=2):
+        patient_id = clean_text(record.get("patient_id"))
+        if not patient_id:
+            continue
+        rows.append(
+            {
+                "row": index,
+                "patient_id": patient_id,
+                "patient_name": clean_text(record.get("patient_name")),
+                "service": clean_text(record.get("service")),
+                "status": clean_text(record.get("status")).lower(),
+                "amount": clean_text(record.get("amount")),
+                "payment_reference": clean_text(record.get("payment_reference")),
+                "verified_by": clean_text(record.get("verified_by")),
+                "updated_at": clean_text(record.get("updated_at")),
+            }
+        )
+    return rows
+
+
+def get_service_subscription(patient_id: str, service: str) -> dict[str, object] | None:
+    """Latest subscription row for a patient+service, or None."""
+    patient_id = clean_text(patient_id)
+    service = clean_text(service).lower()
+    if not patient_id or not service:
+        return None
+    latest = None
+    for row in list_service_subscriptions():
+        if row["patient_id"] == patient_id and row["service"].lower() == service:
+            latest = row
+    return latest
+
+
+def upsert_service_subscription(
+    patient_id: str,
+    patient_name: str,
+    service: str,
+    status: str,
+    amount: str = "",
+    payment_reference: str = "",
+    verified_by: str = "admin",
+) -> bool:
+    """Update an existing patient+service row, or append a new one."""
+    patient_id = clean_text(patient_id)
+    service_key = clean_text(service).lower() or "other"
+    status = clean_text(status).lower()
+    if not patient_id:
+        return False
+    try:
+        worksheet = get_payments_worksheet()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        values = [
+            patient_id,
+            clean_text(patient_name) or patient_id,
+            service_key,
+            status,
+            clean_text(amount),
+            clean_text(payment_reference),
+            clean_text(verified_by) or "admin",
+            now,
+        ]
+        current = get_service_subscription(patient_id, service_key)
+        if current and current.get("row"):
+            row_number = int(current["row"])
+            worksheet.update(
+                [[value for value in values]],
+                f"A{row_number}:H{row_number}",
+                value_input_option="RAW",
+            )
+        else:
+            worksheet.append_row(values, value_input_option="RAW")
+        return True
+    except Exception:
+        return False
+
+
+def service_access_allowed(
+    patient_id: str, service: str
+) -> tuple[bool, str, dict[str, object]]:
+    """Allow by default (no rows yet); block only when an explicit row exists
+    and its status is not 'active'. Doctors and admins always have access."""
+    if current_user_is_admin() or current_user_is_doctor():
+        return True, "", {}
+    patient_id = clean_text(patient_id)
+    if not patient_id:
+        return True, "", {}
+    subscription = get_service_subscription(patient_id, service)
+    if subscription is None:
+        return True, "", {}
+    status = str(subscription.get("status", "active")).lower()
+    if status == "active":
+        return True, "", subscription
+    label = SERVICE_KEY_TO_LABEL.get(str(service).lower(), str(service))
+    message = (
+        f"The **{label}** service is currently **{status.title()}** for your "
+        "account. Contact your clinic or administrator to activate it, or "
+        "check your payment status."
+    )
+    return False, message, subscription
+
+
 def get_all_patients() -> list[dict[str, str]]:
     """Return clinical records plus newly registered patient accounts."""
     worksheet = get_patients_worksheet()
@@ -3543,14 +3745,127 @@ def render_signup_form(widget_prefix: str, auto_login: bool = False) -> None:
                     st.code(str(error))
 
 
+def _render_service_assignment_tab() -> None:
+    """Admin screen for verifying payment and assigning/revoking services."""
+    st.subheader("Service Assignment (Payment Verification)")
+    st.caption(
+        "After a payment is verified, mark the service **Active** to unlock it "
+        "for the patient. Use **Pending** while awaiting confirmation and "
+        "**Revoke** to block access immediately."
+    )
+
+    try:
+        users = get_all_users()
+    except Exception:
+        users = []
+
+    if not users:
+        st.info("No patient accounts are currently visible (Google Sheets unreachable).")
+        st.stop()
+
+    user_labels = {
+        f"{clean_text(user.get('user_id'))} — {clean_text(user.get('full_name')) or clean_text(user.get('username'))}": user
+        for user in users
+    }
+    selected_label = st.selectbox(
+        "Patient",
+        list(user_labels.keys()),
+        key="ss_patient_select",
+        format_func=lambda label: label,
+    )
+    selected_user = user_labels.get(selected_label, {})
+
+    service_key_options = ["clinical_chatbot", "full_diagnostics", "brain_stroke", "heart_disease", "breast_cancer"]
+    service_key = st.selectbox(
+        "Service",
+        service_key_options,
+        key="ss_service_select",
+        format_func=lambda key: SERVICE_KEY_TO_LABEL.get(key, key),
+    )
+    other_service = st.text_input(
+        "Other service name (only if not listed above)",
+        key="ss_other_service",
+        placeholder="e.g. lab_package",
+    )
+    effective_service = (clean_text(other_service).lower() or service_key).strip()
+
+    amount = st.text_input("Amount paid (e.g. 560)", key="ss_amount")
+    payment_reference = st.text_input(
+        "Payment reference (from receipt / payment gateway)",
+        key="ss_payment_reference",
+    )
+
+    action_col, feedback_col = st.columns([2, 5])
+    with action_col:
+        status = None
+        if st.button("✓ Mark Active", key="ss_status_active", use_container_width=True):
+            status = "active"
+        if st.button("◔ Mark Pending", key="ss_status_pending", use_container_width=True):
+            status = "pending"
+        if st.button("✕ Revoke Access", key="ss_status_revoked", use_container_width=True):
+            status = "revoked"
+    with feedback_col:
+        if not status:
+            st.caption("Select an action to save or update this service record.")
+        elif not effective_service:
+            st.error("Please type a non-empty service name.")
+        else:
+            patient_id = clean_text(selected_user.get("user_id"))
+            patient_name = clean_text(selected_user.get("full_name")) or clean_text(selected_user.get("username"))
+            saved = upsert_service_subscription(
+                patient_id=patient_id,
+                patient_name=patient_name,
+                service=effective_service,
+                status=status,
+                amount=amount,
+                payment_reference=payment_reference,
+                verified_by=clean_text(st.session_state.get("current_user", {}).get("full_name")) or "admin",
+            )
+            if saved:
+                st.success(
+                    f"{SERVICE_KEY_TO_LABEL.get(effective_service, effective_service)} "
+                    f"set to **{status.title()}** for {patient_name} ({patient_id})."
+                )
+            else:
+                st.error("Could not save the service record. Check Google Sheets access.")
+
+    st.divider()
+    st.subheader("Current service records")
+    records = list_service_subscriptions()
+    if not records:
+        st.caption("No payment/service records yet. Assign the first one above.")
+        return
+    display_records = [
+        {
+            "Patient ID": record["patient_id"],
+            "Patient": record["patient_name"],
+            "Service": SERVICE_KEY_TO_LABEL.get(str(record["service"]).lower(), record["service"]),
+            "Status": record["status"].title(),
+            "Amount": record["amount"],
+            "Payment Ref": record["payment_reference"],
+            "Verified By": record["verified_by"],
+            "Updated At": record["updated_at"],
+        }
+        for record in records
+    ]
+    st.dataframe(
+        pd.DataFrame(display_records),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
 def admin_page() -> None:
-    """Show administrators a single Sign up tab for creating user accounts."""
+    """Show administrators a Sign up tab and a Service Assignment tab."""
     top_navigation("")
 
-    signup_tab, = st.tabs(["Sign up"])
+    signup_tab, services_tab = st.tabs(["Sign up", "Service Assignment"])
 
     with signup_tab:
         render_signup_form("admin_signup", auto_login=False)
+
+    with services_tab:
+        _render_service_assignment_tab()
 
 
 def dashboard_page() -> None:
@@ -4062,6 +4377,22 @@ def _general_diagnostics_pdf(report_content: str, patient_info: dict[str, object
 
 def general_diagnostics_page() -> None:
     top_navigation("Full Diagnostics Scan")
+
+    identity = logged_in_patient_identity()
+    allowed, message, subscription = service_access_allowed(
+        str(identity["user_id"]), "full_diagnostics"
+    )
+    if not allowed:
+        st.warning(message)
+        if subscription.get("payment_reference"):
+            st.caption(
+                "Payment reference on record: "
+                + clean_text(subscription.get("payment_reference"))
+            )
+        if st.button("← Back to dashboard", key="gd_blocked_back"):
+            st.session_state.active_page = "dashboard"
+            st.rerun()
+        st.stop()
 
     if st.button("← Back to dashboard", key="gd_back"):
         st.session_state.active_page = "dashboard"
@@ -4636,6 +4967,22 @@ def agentic_diagnostic_page() -> None:
     """Render the Agentic Diagnostic app inside SMART CDSS."""
     top_navigation("Full Diagnostics Scan")
 
+    identity = logged_in_patient_identity()
+    allowed, message, subscription = service_access_allowed(
+        str(identity["user_id"]), "full_diagnostics"
+    )
+    if not allowed:
+        st.warning(message)
+        if subscription.get("payment_reference"):
+            st.caption(
+                "Payment reference on record: "
+                + clean_text(subscription.get("payment_reference"))
+            )
+        if st.button("← Back to dashboard", key="agentic_blocked_back"):
+            st.session_state.active_page = "dashboard"
+            st.rerun()
+        st.stop()
+
     if st.button("← Back to dashboard", key="agentic_back_dashboard"):
         st.session_state.active_page = "dashboard"
         st.rerun()
@@ -4789,6 +5136,22 @@ def clinical_chatbot_page() -> None:
 
     The chatbot no longer depends on the bundled FastAPI companion server,
     so the same interface works locally and in the hosted cloud build."""
+    identity = logged_in_patient_identity()
+    allowed, message, subscription = service_access_allowed(
+        str(identity["user_id"]), "clinical_chatbot"
+    )
+    if not allowed:
+        top_navigation("Clinical Chatbot")
+        st.warning(message)
+        if subscription.get("payment_reference"):
+            st.caption(
+                "Payment reference on record: "
+                + clean_text(subscription.get("payment_reference"))
+            )
+        if st.button("← Back to dashboard", key="cb_blocked_back"):
+            st.session_state.active_page = "dashboard"
+            st.rerun()
+        st.stop()
     from clinical_chatbot_streamlit import render_clinical_chatbot_page
     render_clinical_chatbot_page()
 
