@@ -3,24 +3,9 @@
 # ML + RAG + MCP FINAL VERSION
 # ==========================================================
 
-import kagglehub
-import pandas as pd
 import os
 import joblib
-
-
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-from sklearn.ensemble import RandomForestClassifier
-
-from sklearn.metrics import (
-    accuracy_score,
-    classification_report,
-    confusion_matrix,
-    roc_auc_score
-)
-
-from imblearn.over_sampling import SMOTE
+from pathlib import Path
 
 
 
@@ -232,260 +217,255 @@ Recommendations:
 """
 
 
-
 # ==========================================================
 # DATASET
 # ==========================================================
 
 
-print("\nLoading Dataset...")
+def train_and_save_model(saved_path: Path | None = None) -> Path:
+    """Download the stroke dataset, train the model, and persist it.
+
+    Only called on demand (and only when ``stroke_model.pkl`` is missing),
+    so importing this module never downloads data or trains a model.
+    """
+    import kagglehub
+    import pandas as pd
+    from sklearn.model_selection import train_test_split
+    from sklearn.preprocessing import LabelEncoder
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import (
+        accuracy_score,
+        classification_report,
+        confusion_matrix,
+        roc_auc_score
+    )
+    from imblearn.over_sampling import SMOTE
+
+    output_path = saved_path or (
+        Path(__file__).resolve().parent / "stroke_model.pkl"
+    )
+
+    print("\nLoading Dataset...")
+
+    path = kagglehub.dataset_download(
+        "fedesoriano/stroke-prediction-dataset"
+    )
+
+    csv_file = None
+
+    for file in os.listdir(path):
+
+        if file.endswith(".csv"):
+
+            csv_file = os.path.join(
+                path,
+                file
+            )
+
+            break
+
+    df = pd.read_csv(csv_file)
 
 
-path = kagglehub.dataset_download(
-    "fedesoriano/stroke-prediction-dataset"
-)
 
-
-
-csv_file = None
-
-
-for file in os.listdir(path):
-
-    if file.endswith(".csv"):
-
-        csv_file = os.path.join(
-            path,
-            file
+    print(
+            "Dataset:",
+            df.shape
         )
 
-        break
 
 
-
-df = pd.read_csv(csv_file)
-
-
-
-print(
-"Dataset:",
-df.shape
-)
+    # ==========================================================
+    # PREPROCESSING
+    # ==========================================================
 
 
-
-# ==========================================================
-# PREPROCESSING
-# ==========================================================
-
-
-df["bmi"] = df["bmi"].fillna(
-    df["bmi"].median()
-)
-
-
-
-columns = [
-
-"gender",
-"ever_married",
-"work_type",
-"Residence_type",
-"smoking_status"
-
-]
-
-
-for col in columns:
-
-    encoder = LabelEncoder()
-
-    df[col] = encoder.fit_transform(
-        df[col]
+    df["bmi"] = df["bmi"].fillna(
+        df["bmi"].median()
     )
 
 
 
-df.drop(
-"id",
-axis=1,
-inplace=True
-)
+    columns = [
+
+    "gender",
+    "ever_married",
+    "work_type",
+    "Residence_type",
+    "smoking_status"
+
+    ]
+
+
+    for col in columns:
+
+        encoder = LabelEncoder()
+
+        df[col] = encoder.fit_transform(
+            df[col]
+        )
 
 
 
-X = df.drop(
-"stroke",
-axis=1
-)
-
-
-y = df["stroke"]
-
-
-
-# ==========================================================
-# TRAINING
-# ==========================================================
-
-
-X_train,X_test,y_train,y_test = train_test_split(
-
-    X,
-    y,
-    test_size=0.2,
-    random_state=42,
-    stratify=y
-
-)
+    df.drop(
+    "id",
+    axis=1,
+    inplace=True
+    )
 
 
 
-smote = SMOTE(
-random_state=42
-)
+    X = df.drop(
+    "stroke",
+    axis=1
+    )
+
+
+    y = df["stroke"]
 
 
 
-X_train,y_train = smote.fit_resample(
+    # ==========================================================
+    # TRAINING
+    # ==========================================================
+
+
+    X_train,X_test,y_train,y_test = train_test_split(
+
+        X,
+        y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y
+
+    )
+
+
+
+    smote = SMOTE(
+    random_state=42
+    )
+
+
+
+    X_train,y_train = smote.fit_resample(
+        X_train,
+        y_train
+    )
+
+
+
+    print(
+    "\nSMOTE Applied"
+    )
+
+
+
+    model = RandomForestClassifier(
+
+        n_estimators=400,
+
+        class_weight="balanced",
+
+        random_state=42
+
+    )
+
+
+
+    model.fit(
     X_train,
     y_train
-)
+    )
 
 
 
-print(
-"\nSMOTE Applied"
-)
+    # ==========================================================
+    # EVALUATION
+    # ==========================================================
+
+
+    prediction = model.predict(
+    X_test
+    )
+
+
+    probabilities = model.predict_proba(
+    X_test
+    )[:,1]
 
 
 
-model = RandomForestClassifier(
-
-    n_estimators=400,
-
-    class_weight="balanced",
-
-    random_state=42
-
-)
+    print("\nMODEL PERFORMANCE")
 
 
-
-model.fit(
-X_train,
-y_train
-)
+    print(
+    "Accuracy:",
+    round(
+    accuracy_score(y_test,prediction)*100,
+    2
+    ),
+    "%"
+    )
 
 
 
-# ==========================================================
-# EVALUATION
-# ==========================================================
-
-
-prediction = model.predict(
-X_test
-)
-
-
-probabilities = model.predict_proba(
-X_test
-)[:,1]
+    print(
+    "ROC-AUC:",
+    round(
+    roc_auc_score(y_test,probabilities),
+    3
+    )
+    )
 
 
 
-print("\nMODEL PERFORMANCE")
+    print(
+    "\nClassification Report"
+    )
 
 
-print(
-"Accuracy:",
-round(
-accuracy_score(y_test,prediction)*100,
-2
-),
-"%"
-)
-
-
-
-print(
-"ROC-AUC:",
-round(
-roc_auc_score(y_test,probabilities),
-3
-)
-)
+    print(
+    classification_report(
+    y_test,
+    prediction,
+    zero_division=0
+    )
+    )
 
 
 
-print(
-"\nClassification Report"
-)
+    print(
+    "\nConfusion Matrix"
+    )
 
 
-print(
-classification_report(
-y_test,
-prediction,
-zero_division=0
-)
-)
-
-
-
-print(
-"\nConfusion Matrix"
-)
-
-
-print(
-confusion_matrix(
-y_test,
-prediction
-)
-)
+    print(
+    confusion_matrix(
+    y_test,
+    prediction
+    )
+    )
 
 
 
-joblib.dump(
-model,
-"stroke_model.pkl"
-)
+    joblib.dump(
+    model,
+    str(output_path)
+    )
 
 
 
-print(
-"\nModel Saved"
-)
+    print(
+    "\nModel Saved"
+    )
+
+    return output_path
 
 
 
 # ==========================================================
 # STREAMLIT MEDICAL ASSISTANT FUNCTION
-# ==========================================================
-
-
-def ask_medical_agent(question):
-
-    response = rag_retrieve(question)
-
-    final_response = f"""
-{response}
-
-
-DISCLAIMER:
-
-This AI system is for educational purposes only.
-It does not replace professional medical diagnosis.
-"""
-
-    return final_response
-
-
-
-# ==========================================================
-# RAG ASSISTANT FUNCTION FOR STREAMLIT
 # ==========================================================
 
 
