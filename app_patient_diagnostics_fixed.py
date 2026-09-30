@@ -26,7 +26,7 @@ st.set_page_config(
     page_title="SMART Clinic",
     page_icon="🧠",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="auto",
 )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -4356,6 +4356,23 @@ def load_general_diagnostic_agent():
     return DiagnosticAgent()
 
 
+@st.cache_resource(show_spinner=False)
+def load_embedded_diagnostics_dashboard():
+    """Import the bundled Full Diagnostics sidebar app for in-process rendering.
+
+    The desktop build launches general_diagnostics\\app.py as a second Streamlit
+    server (port 8600) and embeds it in an iframe. A hosted Streamlit Cloud build
+    can only run a single app, so the very same dashboard is rendered inside this
+    process instead. Importing the module is safe because its st.set_page_config
+    call only fires when it is executed as its own entry point.
+    """
+    configure_diagnostic_imports()
+
+    from importlib import import_module
+
+    return import_module("app")
+
+
 def _general_diagnostics_pdf(report_content: str, patient_info: dict[str, object]) -> bytes:
     """Generate a PDF while supporting different fpdf2 return types."""
     configure_diagnostic_imports()
@@ -4397,6 +4414,23 @@ def general_diagnostics_page() -> None:
     if st.button("← Back to dashboard", key="gd_back"):
         st.session_state.active_page = "dashboard"
         st.rerun()
+
+    # On the hosted single-app build, render the very same Full Diagnostics
+    # sidebar dashboard that the desktop build shows on port 8600. It is
+    # imported and drawn inside this process because Streamlit Cloud can only
+    # run one app. If anything about the embedded app is unavailable, we fall
+    # back to the simplified in-process form below.
+    if CLOUD_DEPLOY:
+        try:
+            embedded_dashboard = load_embedded_diagnostics_dashboard()
+        except Exception as error:
+            st.warning(
+                "The full diagnostics dashboard could not be loaded, so the "
+                f"simplified form is shown instead. ({error})"
+            )
+        else:
+            embedded_dashboard.main()
+            return
 
     st.markdown(
         """

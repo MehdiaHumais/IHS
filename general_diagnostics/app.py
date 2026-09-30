@@ -266,254 +266,270 @@ COMMON_SYMPTOMS = [
 ]
 
 
-st.set_page_config(
-    page_title="Smart Clinic Diagnostic Agent",
-    page_icon="🏥",
-    layout="wide"
-)
+# When this module is executed as its own Streamlit entry point (the desktop
+# .bat / a direct `streamlit run app.py`) it configures the page itself. When
+# it is imported by the Smart Clinic portal — so the same sidebar dashboard can
+# be rendered inside the hosted single-app deployment — the host app has
+# already called st.set_page_config, and Streamlit raises if a script calls it a
+# second time. In that embedded case we skip it and inherit the host's page
+# configuration instead.
+if __name__ == "__main__":
+    st.set_page_config(
+        page_title="Smart Clinic Diagnostic Agent",
+        page_icon="🏥",
+        layout="wide"
+    )
 
 
-if "clinical_case_input" not in st.session_state:
-    st.session_state.clinical_case_input = ""
+def init_diagnostics_session_state():
+    """Seed the default clinical form/session keys for the dashboard.
 
-if "chief_complaint" not in st.session_state:
-    st.session_state.chief_complaint = ""
+    This runs on every call to main() rather than at import time. The host
+    Smart Clinic portal imports this module once per process, so module-level
+    initialisation would only seed the very first session and later sessions
+    would raise KeyError when the widgets read st.session_state below.
+    """
+    if "clinical_case_input" not in st.session_state:
+        st.session_state.clinical_case_input = ""
 
-if "chief_complaint_input" not in st.session_state:
-    st.session_state.chief_complaint_input = ""
+    if "chief_complaint" not in st.session_state:
+        st.session_state.chief_complaint = ""
 
-if "symptoms" not in st.session_state:
-    st.session_state.symptoms = ""
+    if "chief_complaint_input" not in st.session_state:
+        st.session_state.chief_complaint_input = ""
 
-if "symptoms_input" not in st.session_state:
-    st.session_state.symptoms_input = ""
+    if "symptoms" not in st.session_state:
+        st.session_state.symptoms = ""
 
-if "saved_other_symptoms" not in st.session_state:
-    st.session_state.saved_other_symptoms = ""
+    if "symptoms_input" not in st.session_state:
+        st.session_state.symptoms_input = ""
 
-if "selected_common_symptoms" not in st.session_state:
-    st.session_state.selected_common_symptoms = []
+    if "saved_other_symptoms" not in st.session_state:
+        st.session_state.saved_other_symptoms = ""
 
-if "clinical_notes_input" not in st.session_state:
-    st.session_state.clinical_notes_input = ""
+    if "selected_common_symptoms" not in st.session_state:
+        st.session_state.selected_common_symptoms = []
 
-if "lab_data" not in st.session_state:
-    st.session_state.lab_data = ""
+    if "clinical_notes_input" not in st.session_state:
+        st.session_state.clinical_notes_input = ""
 
-if "image_findings" not in st.session_state:
-    st.session_state.image_findings = ""
+    if "lab_data" not in st.session_state:
+        st.session_state.lab_data = ""
 
-if "medical_analysis_image_findings_input" not in st.session_state:
-    st.session_state.medical_analysis_image_findings_input = ""
+    if "image_findings" not in st.session_state:
+        st.session_state.image_findings = ""
 
-if "saved_image_findings" not in st.session_state:
-    st.session_state.saved_image_findings = ""
+    if "medical_analysis_image_findings_input" not in st.session_state:
+        st.session_state.medical_analysis_image_findings_input = ""
 
-if "document_findings" not in st.session_state:
-    st.session_state.document_findings = ""
+    if "saved_image_findings" not in st.session_state:
+        st.session_state.saved_image_findings = ""
 
-if "medical_analysis_document_findings_input" not in st.session_state:
-    st.session_state.medical_analysis_document_findings_input = ""
+    if "document_findings" not in st.session_state:
+        st.session_state.document_findings = ""
 
-if "saved_document_findings" not in st.session_state:
-    st.session_state.saved_document_findings = ""
+    if "medical_analysis_document_findings_input" not in st.session_state:
+        st.session_state.medical_analysis_document_findings_input = ""
 
-if "document_types" not in st.session_state:
-    st.session_state.document_types = {}
+    if "saved_document_findings" not in st.session_state:
+        st.session_state.saved_document_findings = ""
 
-if "uploaded_files_info" not in st.session_state:
-    st.session_state.uploaded_files_info = []
+    if "document_types" not in st.session_state:
+        st.session_state.document_types = {}
 
-if "uploader_version" not in st.session_state:
-    st.session_state.uploader_version = 0
+    if "uploaded_files_info" not in st.session_state:
+        st.session_state.uploaded_files_info = []
 
-if "analysis_results" not in st.session_state:
-    st.session_state.analysis_results = None
+    if "uploader_version" not in st.session_state:
+        st.session_state.uploader_version = 0
 
-if "readmission_result" not in st.session_state:
-    st.session_state.readmission_result = None
+    if "analysis_results" not in st.session_state:
+        st.session_state.analysis_results = None
 
-if "medication_result" not in st.session_state:
-    st.session_state.medication_result = None
+    if "readmission_result" not in st.session_state:
+        st.session_state.readmission_result = None
 
-if "saved_readmission_inputs" not in st.session_state:
-    st.session_state.saved_readmission_inputs = {}
+    if "medication_result" not in st.session_state:
+        st.session_state.medication_result = None
 
-if "patient_id" not in st.session_state:
-    st.session_state.patient_id = ""
+    if "saved_readmission_inputs" not in st.session_state:
+        st.session_state.saved_readmission_inputs = {}
 
-if "patient_name" not in st.session_state:
-    st.session_state.patient_name = ""
+    if "patient_id" not in st.session_state:
+        st.session_state.patient_id = ""
 
-if "patient_age" not in st.session_state:
-    st.session_state.patient_age = 30
+    if "patient_name" not in st.session_state:
+        st.session_state.patient_name = ""
 
-if "patient_gender" not in st.session_state:
-    st.session_state.patient_gender = "Male"
+    if "patient_age" not in st.session_state:
+        st.session_state.patient_age = 30
 
-if "patient_phone" not in st.session_state:
-    st.session_state.patient_phone = ""
+    if "patient_gender" not in st.session_state:
+        st.session_state.patient_gender = "Male"
 
-if "patient_address" not in st.session_state:
-    st.session_state.patient_address = ""
+    if "patient_phone" not in st.session_state:
+        st.session_state.patient_phone = ""
 
-if "patient_cnic" not in st.session_state:
-    st.session_state.patient_cnic = ""
+    if "patient_address" not in st.session_state:
+        st.session_state.patient_address = ""
 
-if "patient_email" not in st.session_state:
-    st.session_state.patient_email = ""
+    if "patient_cnic" not in st.session_state:
+        st.session_state.patient_cnic = ""
 
-if "emergency_contact_phone" not in st.session_state:
-    st.session_state.emergency_contact_phone = ""
+    if "patient_email" not in st.session_state:
+        st.session_state.patient_email = ""
 
-if "emergency_contact_relationship" not in st.session_state:
-    st.session_state.emergency_contact_relationship = ""
+    if "emergency_contact_phone" not in st.session_state:
+        st.session_state.emergency_contact_phone = ""
 
-if "member_type" not in st.session_state:
-    st.session_state.member_type = "Regular"
+    if "emergency_contact_relationship" not in st.session_state:
+        st.session_state.emergency_contact_relationship = ""
 
-if "patient_date_of_birth" not in st.session_state:
-    st.session_state.patient_date_of_birth = None
+    if "member_type" not in st.session_state:
+        st.session_state.member_type = "Regular"
 
-if "payment_method" not in st.session_state:
-    st.session_state.payment_method = "Cash"
+    if "patient_date_of_birth" not in st.session_state:
+        st.session_state.patient_date_of_birth = None
 
-if "selected_date" not in st.session_state:
-    st.session_state.selected_date = None
+    if "payment_method" not in st.session_state:
+        st.session_state.payment_method = "Cash"
 
-if "last_visit_input" not in st.session_state:
-    st.session_state.last_visit_input = ""
+    if "selected_date" not in st.session_state:
+        st.session_state.selected_date = None
 
-if "last_visit" not in st.session_state:
-    st.session_state.last_visit = ""
+    if "last_visit_input" not in st.session_state:
+        st.session_state.last_visit_input = ""
 
-if "saved_last_visit" not in st.session_state:
-    st.session_state.saved_last_visit = ""
+    if "last_visit" not in st.session_state:
+        st.session_state.last_visit = ""
 
-if "medical_history" not in st.session_state:
-    st.session_state.medical_history = ""
+    if "saved_last_visit" not in st.session_state:
+        st.session_state.saved_last_visit = ""
 
-if "chronic_conditions" not in st.session_state:
-    st.session_state.chronic_conditions = ""
+    if "medical_history" not in st.session_state:
+        st.session_state.medical_history = ""
 
-if "past_surgeries" not in st.session_state:
-    st.session_state.past_surgeries = ""
+    if "chronic_conditions" not in st.session_state:
+        st.session_state.chronic_conditions = ""
 
-if "known_allergies" not in st.session_state:
-    st.session_state.known_allergies = ""
+    if "past_surgeries" not in st.session_state:
+        st.session_state.past_surgeries = ""
 
-if "current_medications" not in st.session_state:
-    st.session_state.current_medications = ""
+    if "known_allergies" not in st.session_state:
+        st.session_state.known_allergies = ""
 
-if "family_history" not in st.session_state:
-    st.session_state.family_history = ""
+    if "current_medications" not in st.session_state:
+        st.session_state.current_medications = ""
 
-if "immunization_history" not in st.session_state:
-    st.session_state.immunization_history = ""
+    if "family_history" not in st.session_state:
+        st.session_state.family_history = ""
 
-if "show_results" not in st.session_state:
-    st.session_state.show_results = False
+    if "immunization_history" not in st.session_state:
+        st.session_state.immunization_history = ""
 
-if "clinical_classification_result" not in st.session_state:
-    st.session_state.clinical_classification_result = None
+    if "show_results" not in st.session_state:
+        st.session_state.show_results = False
 
-if "heart_disease_result" not in st.session_state:
-    st.session_state.heart_disease_result = None
+    if "clinical_classification_result" not in st.session_state:
+        st.session_state.clinical_classification_result = None
 
-# Breast cancer ultrasound classification state.
-if "breast_cancer_result" not in st.session_state:
-    st.session_state.breast_cancer_result = None
+    if "heart_disease_result" not in st.session_state:
+        st.session_state.heart_disease_result = None
 
-if "last_breast_us_signature" not in st.session_state:
-    st.session_state.last_breast_us_signature = None
+    # Breast cancer ultrasound classification state.
+    if "breast_cancer_result" not in st.session_state:
+        st.session_state.breast_cancer_result = None
 
-if "breast_cancer_image_path" not in st.session_state:
-    st.session_state.breast_cancer_image_path = None
+    if "last_breast_us_signature" not in st.session_state:
+        st.session_state.last_breast_us_signature = None
 
-if "breast_cancer_note_added_signature" not in st.session_state:
-    st.session_state.breast_cancer_note_added_signature = None
+    if "breast_cancer_image_path" not in st.session_state:
+        st.session_state.breast_cancer_image_path = None
 
-if "previous_admissions" not in st.session_state:
-    st.session_state.previous_admissions = 0
+    if "breast_cancer_note_added_signature" not in st.session_state:
+        st.session_state.breast_cancer_note_added_signature = None
 
-if "previous_admissions_input" not in st.session_state:
-    st.session_state.previous_admissions_input = 0
+    if "previous_admissions" not in st.session_state:
+        st.session_state.previous_admissions = 0
 
-if "length_of_stay" not in st.session_state:
-    st.session_state.length_of_stay = 0
+    if "previous_admissions_input" not in st.session_state:
+        st.session_state.previous_admissions_input = 0
 
-if "length_of_stay_input" not in st.session_state:
-    st.session_state.length_of_stay_input = 0
+    if "length_of_stay" not in st.session_state:
+        st.session_state.length_of_stay = 0
 
-if "emergency_visits" not in st.session_state:
-    st.session_state.emergency_visits = 0
+    if "length_of_stay_input" not in st.session_state:
+        st.session_state.length_of_stay_input = 0
 
-if "emergency_visits_input" not in st.session_state:
-    st.session_state.emergency_visits_input = 0
+    if "emergency_visits" not in st.session_state:
+        st.session_state.emergency_visits = 0
 
-if "number_of_medications" not in st.session_state:
-    st.session_state.number_of_medications = 0
+    if "emergency_visits_input" not in st.session_state:
+        st.session_state.emergency_visits_input = 0
 
-if "number_of_medications_input" not in st.session_state:
-    st.session_state.number_of_medications_input = 0
+    if "number_of_medications" not in st.session_state:
+        st.session_state.number_of_medications = 0
 
-if "discharge_disposition" not in st.session_state:
-    st.session_state.discharge_disposition = "Home / Self Care"
+    if "number_of_medications_input" not in st.session_state:
+        st.session_state.number_of_medications_input = 0
 
-if "discharge_disposition_input" not in st.session_state:
-    st.session_state.discharge_disposition_input = "Home / Self Care"
+    if "discharge_disposition" not in st.session_state:
+        st.session_state.discharge_disposition = "Home / Self Care"
 
+    if "discharge_disposition_input" not in st.session_state:
+        st.session_state.discharge_disposition_input = "Home / Self Care"
 
-if "blood_pressure" not in st.session_state:
-    st.session_state.blood_pressure = ""
 
-if "heart_rate" not in st.session_state:
-    st.session_state.heart_rate = 0
+    if "blood_pressure" not in st.session_state:
+        st.session_state.blood_pressure = ""
 
-if "respiratory_rate" not in st.session_state:
-    st.session_state.respiratory_rate = 0
+    if "heart_rate" not in st.session_state:
+        st.session_state.heart_rate = 0
 
-if "patient_weight" not in st.session_state:
-    st.session_state.patient_weight = 0.0
+    if "respiratory_rate" not in st.session_state:
+        st.session_state.respiratory_rate = 0
 
-if "patient_height" not in st.session_state:
-    st.session_state.patient_height = 0.0
+    if "patient_weight" not in st.session_state:
+        st.session_state.patient_weight = 0.0
 
-if "blood_glucose" not in st.session_state:
-    st.session_state.blood_glucose = 0.0
+    if "patient_height" not in st.session_state:
+        st.session_state.patient_height = 0.0
 
-if "body_temperature" not in st.session_state:
-    st.session_state.body_temperature = 0.0
+    if "blood_glucose" not in st.session_state:
+        st.session_state.blood_glucose = 0.0
 
-if "temperature_scale" not in st.session_state:
-    st.session_state.temperature_scale = "°F"
+    if "body_temperature" not in st.session_state:
+        st.session_state.body_temperature = 0.0
 
-if "oxygen_saturation" not in st.session_state:
-    st.session_state.oxygen_saturation = 0
+    if "temperature_scale" not in st.session_state:
+        st.session_state.temperature_scale = "°F"
 
-if "waist_circumference" not in st.session_state:
-    st.session_state.waist_circumference = 0.0
+    if "oxygen_saturation" not in st.session_state:
+        st.session_state.oxygen_saturation = 0
 
-if "blood_group" not in st.session_state:
-    st.session_state.blood_group = "A+"
+    if "waist_circumference" not in st.session_state:
+        st.session_state.waist_circumference = 0.0
 
-if "saved_medical_history" not in st.session_state:
-    st.session_state.saved_medical_history = None
+    if "blood_group" not in st.session_state:
+        st.session_state.blood_group = "A+"
 
-if "saved_chief_complaint" not in st.session_state:
-    st.session_state.saved_chief_complaint = ""
+    if "saved_medical_history" not in st.session_state:
+        st.session_state.saved_medical_history = None
 
-if "saved_symptoms" not in st.session_state:
-    st.session_state.saved_symptoms = ""
+    if "saved_chief_complaint" not in st.session_state:
+        st.session_state.saved_chief_complaint = ""
 
-if "saved_selected_common_symptoms" not in st.session_state:
-    st.session_state.saved_selected_common_symptoms = []
+    if "saved_symptoms" not in st.session_state:
+        st.session_state.saved_symptoms = ""
 
-if "saved_clinical_notes" not in st.session_state:
-    st.session_state.saved_clinical_notes = ""
+    if "saved_selected_common_symptoms" not in st.session_state:
+        st.session_state.saved_selected_common_symptoms = []
 
-if "saved_clinical_case" not in st.session_state:
-    st.session_state.saved_clinical_case = ""
+    if "saved_clinical_notes" not in st.session_state:
+        st.session_state.saved_clinical_notes = ""
+
+    if "saved_clinical_case" not in st.session_state:
+        st.session_state.saved_clinical_case = ""
 
 
 WIDGET_TO_CANONICAL = {
@@ -2565,8 +2581,16 @@ def run_stroke_risk_prediction(
 
 
 def main():
+    # Seed the clinical form/session keys for THIS session before any widget
+    # below reads them (important when the host portal renders this in-process
+    # across multiple user sessions).
+    init_diagnostics_session_state()
+
+    # Resolve the stylesheet relative to this file so the dashboard keeps its
+    # styling whether the app runs as its own entry point (CWD = this folder)
+    # or is rendered in-process inside the Smart Clinic portal (CWD = portal).
     try:
-        with open("static/css/style.css", "r") as f:
+        with open(BASE_DIR / "static" / "css" / "style.css", "r") as f:
             css = f.read()
 
         st.markdown(
