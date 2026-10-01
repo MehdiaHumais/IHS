@@ -12,8 +12,100 @@ from datetime import datetime
 import hashlib
 import json
 import csv
+import re
 import xlrd  # For older Excel files
 import shutil
+
+# Legacy binary .doc stores a lot of non-text structure that survives a naive
+# decode as binary noise; drop it before deciding if recovery worked.
+_WORD_JUNK_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+_WORD_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffd]")
+
+# RTF escapes the characters that would otherwise terminate a control word,
+# so unescape those before stripping markup.
+_RTF_ESCAPES = {
+    "\\": "\\\\",
+    "{": "\\{",
+    "}": "\\}",
+}
+
+# Control words we translate into real characters rather than discard.
+_RTF_SYMBOLS = {
+    "par": "\n",
+    "line": "\n",
+    "sect": "\n\n",
+    "page": "\n\n",
+    "tab": "\t",
+    "emdash": "\u2014",
+    "endash": "\u2013",
+    "lquote": "\u2018",
+    "rquote": "\u2019",
+    "ldblquote": "\u201c",
+    "rdblquote": "\u201d",
+    "bullet": "\u2022",
+}
+
+# A control word is \letters followed by an optional signed number.
+_RTF_CONTROL_WORD_RE = re.compile(r"\\([a-zA-Z]+)(-?\d+)? ?")
+# \ followed by a non-letter is an escaped literal, not a control word.
+_RTF_SYMBOL_ESCAPE_RE = re.compile(r"\\([^a-zA-Z])")
+
+
+def _rtf_to_text(raw: str) -> str:
+    """Convert RTF source into readable plain text.
+
+    Skips the header group, drops control words (while honouring the
+    \\'hh hex escapes that carry non-ASCII characters), converts the common
+    symbol control words, then unbalances the brace groups.
+    """
+    text = []
+    index = 0
+    length = len(raw)
+    # The header group (\\rtf1\\ansi...) carries no document content.
+    if raw.lstrip().startswith("{\\rtf"):
+        index = raw.find("\\rtf")
+        brace = raw.rfind("{", 0, index)
+        if brace != -1:
+            index = brace
+
+    while index < length:
+        char = raw[index]
+        if char == "\\":
+            match = _RTF_CONTROL_WORD_RE.match(raw, index)
+            if match:
+                word = match.group(1)
+                text.append(_RTF_SYMBOLS.get(word, ""))
+                index = match.end()
+                continue
+            match = _RTF_SYMBOL_ESCAPE_RE.match(raw, index)
+            if match:
+                escaped = match.group(1)
+                if escaped == "'" and index + 3 < length:
+                    hex_digits = raw[index + 1:index + 3]
+                    try:
+                        text.append(bytes([int(hex_digits, 16)]).decode("cp1252", errors="replace"))
+                        index += 4
+                        continue
+                    except ValueError:
+                        pass
+                if escaped in ("\n", "\r"):
+                    text.append("\n")
+                    index += 2
+                    continue
+                text.append(_RTF_ESCAPES.get(escaped, escaped))
+                index = match.end()
+                continue
+            index += 1
+        elif char in "{}":
+            index += 1
+        else:
+            text.append(char)
+            index += 1
+
+    result = "".join(text)
+    result = re.sub(r"[ \t]+\n", "\n", result)
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result.strip()
 
 # --- OCR and PDF-to-Image Conversion ---
 # It's recommended to have these libraries installed for full functionality
@@ -199,7 +291,7 @@ class FileHandler:
         return text
 
     def read_docx(self, file_path):
-        """Read text from DOCX file"""
+        """Read text from a modern .docx (Office Open XML) file."""
         try:
             doc = Document(file_path)
             text = ""
@@ -219,9 +311,121 @@ class FileHandler:
                 for paragraph in footer.paragraphs:
                     text += f"[FOOTER] {paragraph.text}\n"
             return text
-        except Exception as e:
-            print(f"Error reading DOCX: {str(e)}")
+        except Exception as docx_error:
+            # .docx is a ZIP archive; some producers (notably older Word and a
+            # few export tools) emit an OLE2 binary .doc under a .docx name.
+            if not self._is_zip_container(file_path):
+                return self._read_legacy_doc(file_path, docx_error)
+            print(f"Error reading DOCX: {str(docx_error)}")
             return "Could not read DOCX file"
+
+    @staticmethod
+    def _is_zip_container(file_path):
+        """True when the file starts with the ZIP magic bytes OOXML requires."""
+        try:
+            with open(file_path, "rb") as handle:
+                return handle.read(4) == b"PK\x03\x04"
+        except OSError:
+            return False
+
+    @staticmethod
+    def _read_legacy_doc(file_path, original_error):
+        """Best-effort text recovery from the legacy binary .doc format.
+
+        Word 97-2003 stores text in the WordDocument stream as UTF-16 or
+        compressed 8-bit runs. Without antiword/LibreOffice we cannot parse the
+        full FIB structure, so pull out whatever readable runs exist instead of
+        failing outright. This is a fallback, not a faithful converter.
+        """
+        raw = None
+        for encoding in ("utf-16-le", "latin-1"):
+            try:
+                with open(file_path, "rb") as handle:
+                    raw = handle.read()
+                candidate = raw.decode(encoding, errors="ignore")
+                if candidate.count("\x00") > len(candidate) * 0.4:
+                    continue
+                text = _WORD_JUNK_RE.sub(" ", candidate)
+                text = _WORD_CONTROL_RE.sub("", text)
+                text = re.sub(r"[ \t]+", " ", text)
+                text = re.sub(r"\n{3,}", "\n\n", text).strip()
+                if len(text) >= 40:
+                    header = (
+                        "[Legacy .doc file: recovered best-effort text. "
+                        "Re-save as .docx or .pdf for a faithful conversion.]\n"
+                    )
+                    return header + text
+            except OSError:
+                continue
+        return (
+            f"Could not read this .doc file ({original_error}). "
+            "Please re-save it as .docx, .rtf or .pdf."
+        )
+
+    def read_rtf(self, file_path):
+        """Read text from an RTF file, stripping RTF markup and escapes."""
+        try:
+            with open(file_path, "rb") as handle:
+                raw_bytes = handle.read()
+            raw_text = ""
+            for encoding in ("utf-8", "latin-1"):
+                try:
+                    raw_text = raw_bytes.decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            if not raw_text.lstrip().startswith("{\\rtf"):
+                return self._read_plain_text_file(file_path)
+            return _rtf_to_text(raw_text)
+        except Exception as e:
+            print(f"Error reading RTF: {str(e)}")
+            return "Could not read RTF file"
+
+    def read_odt(self, file_path):
+        """Read text from an OpenDocument Text (.odt) file.
+
+        .odt is a ZIP of XML, so read content.xml directly and pull out the
+        text nodes. No extra dependency needed.
+        """
+        try:
+            import zipfile
+            from xml.etree import ElementTree
+
+            with zipfile.ZipFile(file_path) as archive:
+                if "content.xml" not in archive.namelist():
+                    raise ValueError("content.xml is missing from the ODT package")
+                content = archive.read("content.xml")
+
+            root = ElementTree.fromstring(content)
+            text_chunks = []
+            for element in root.iter():
+                tag = element.tag.rsplit("}", 1)[-1]
+                if tag in ("p", "h", "list-item"):
+                    line = "".join(
+                        node.text or "" for node in element.iter() if node.text
+                    ).strip()
+                    if line:
+                        text_chunks.append(line)
+                elif tag == "table-cell":
+                    cell = "".join(node.text or "" for node in element.iter() if node.text).strip()
+                    if cell:
+                        text_chunks.append(f"| {cell}")
+            return "\n".join(text_chunks)
+        except Exception as e:
+            print(f"Error reading ODT: {str(e)}")
+            return f"Could not read ODT file: {e}"
+
+    @staticmethod
+    def _read_plain_text_file(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as handle:
+                return handle.read()
+        except UnicodeDecodeError:
+            try:
+                with open(file_path, "r", encoding="latin-1") as handle:
+                    return handle.read()
+            except Exception:
+                return f"Could not decode text file: {os.path.basename(file_path)}"
     
     def read_excel(self, file_path):
         """Read data from Excel file with proper formatting"""
@@ -429,26 +633,24 @@ class FileHandler:
 
             if ext == '.pdf':
                 return self.read_pdf(file_path)
-            elif ext in ['.doc', '.docx']:
+            elif ext == '.docx':
                 return self.read_docx(file_path)
+            elif ext == '.doc':
+                # Legacy binary Word: not an OOXML package, so hand it to the
+                # best-effort reader instead of the python-docx parser.
+                return self._read_legacy_doc(file_path, "legacy .doc format")
+            elif ext == '.rtf':
+                return self.read_rtf(file_path)
+            elif ext in ['.odt']:
+                return self.read_odt(file_path)
             elif ext in ['.xls', '.xlsx']:
                 return self.read_excel(file_path)
             elif ext == '.csv':
                 return self.read_csv(file_path)
             elif ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp', '.dcm', '.dicom']:
                 return self.read_image(file_path)
-            elif ext in ['.txt', '.rtf', '.md']:
-                # For simple text files
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        return f.read()
-                except UnicodeDecodeError:
-                    # Try with different encoding
-                    try:
-                        with open(file_path, 'r', encoding='latin-1') as f:
-                            return f.read()
-                    except:
-                        return f"Could not decode text file: {os.path.basename(file_path)}"
+            elif ext in ['.txt', '.md']:
+                return self._read_plain_text_file(file_path)
             else:
                 # For other file types, try to read as text if possible
                 try:
