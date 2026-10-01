@@ -124,6 +124,104 @@ def _init_state() -> None:
     st.session_state.setdefault("cb_appt_form", False)
 
 
+def _sidebar_value(patient: dict, *keys: str) -> str:
+    """First non-empty value for the given keys, or 'None on record'."""
+    for key in keys:
+        value = patient.get(key)
+        if isinstance(value, list):
+            value = ", ".join(str(item) for item in value if str(item).strip())
+        value = str(value or "").strip()
+        if value:
+            return value
+    return "None on record"
+
+
+def _render_profile_snapshot(pid: str, patient: dict) -> None:
+    """Rebuild the .bat app's 'Profile Snapshot' sidebar as a Streamlit sidebar.
+
+    The standalone clinical_chatbot/index.html renders an <aside> panel with
+    these exact fields. The in-process Streamlit port had no sidebar at all, so
+    the hosted build looked nothing like the desktop one.
+    """
+    with st.sidebar:
+        st.markdown(
+            """
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+              <div style="width:38px;height:38px;border-radius:10px;background:#e00000;
+                          color:#fff;display:flex;align-items:center;justify-content:center;
+                          font-weight:800;font-size:17px;">+</div>
+              <div>
+                <div style="font-weight:800;font-size:15px;color:#0f172a;line-height:1.15;">Clinical Chatbot</div>
+                <div style="font-size:11px;color:#64748b;">Smart Clinic Assistant</div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown("---")
+
+        def _field(label: str, value: str) -> None:
+            st.caption(label.upper())
+            st.markdown(
+                f"<div style='font-size:13px;font-weight:600;color:#0f172a;"
+                f"margin:-6px 0 10px 0;'>{value}</div>",
+                unsafe_allow_html=True,
+            )
+
+        def _block(label: str, value: str) -> None:
+            st.caption(label.upper())
+            st.markdown(
+                f"<div style='background:#f8fafc;border-radius:10px;padding:8px 10px;"
+                f"font-size:12px;color:#334155;margin:-4px 0 10px 0;'>{value}</div>",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("##### Profile Snapshot")
+        _field("Patient", str(patient.get("name") or _patient_display_name(pid)))
+
+        allergies = patient.get("allergies") or []
+        if isinstance(allergies, str):
+            allergies = [allergies]
+        if allergies:
+            tags = "".join(
+                f"<span style='display:inline-block;background:#ffe4e4;color:#b80000;"
+                f"border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;"
+                f"margin:2px 3px 2px 0;'>{str(item)}</span>"
+                for item in allergies
+            )
+            _block("Known Allergies", tags)
+        else:
+            _block("Known Allergies", "<span style='color:#64748b;'>None on record</span>")
+
+        age = str(patient.get("age") or "").strip()
+        gender = str(patient.get("gender") or "").strip()
+        _block(
+            "Age / Gender",
+            f"<span style='font-weight:600;'>{' / '.join(p for p in (age, gender) if p) or 'None on record'}</span>",
+        )
+        _block("Symptoms / Visit reason", _sidebar_value(patient, "visit_reason", "symptoms"))
+        _block("Severity", _sidebar_value(patient, "symptom_severity"))
+        _block("Visit category", _sidebar_value(patient, "visit_category"))
+
+        flags = []
+        if str(patient.get("needs_medical_note", "")).strip().lower() == "yes":
+            flags.append("Medical note")
+        if str(patient.get("needs_prescription_renewal", "")).strip().lower() == "yes":
+            flags.append("Prescription renewal")
+        _block(
+            "Visit flags",
+            f"<span style='color:#64748b;'>{', '.join(flags) or 'None on record'}</span>",
+        )
+        _field("Current medications", _sidebar_value(patient, "current_medications"))
+        _field("Medical history", _sidebar_value(patient, "medical_history"))
+
+        st.markdown("---")
+        st.caption(
+            "Research prototype — always confirm with a licensed clinician before "
+            "acting on this output."
+        )
+
+
 def _is_doctor() -> bool:
     return str(
         st.session_state.get("current_user", {}).get("user_type", "")
@@ -583,6 +681,9 @@ def render_clinical_chatbot_page() -> None:
         )
 
     pid, patient = _resolve_patient(cb)
+
+    # Match the standalone .bat chatbot's left "Profile Snapshot" panel.
+    _render_profile_snapshot(pid, patient)
 
     tab_label = f"Chatting as **{_patient_display_name(pid) or pid}**"
     st.caption(tab_label)
