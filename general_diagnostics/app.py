@@ -3964,8 +3964,18 @@ def main():
         )
 
         uploaded_docs = st.file_uploader(
-            "Upload Medical Records, Lab Reports, or Clinical PDFs",
-            type=["pdf", "txt", "docx", "csv"],
+            "Upload Medical Records, Lab Reports, or Clinical Documents",
+            type=[
+                "pdf",
+                "txt",
+                "doc",
+                "docx",
+                "rtf",
+                "odt",
+                "csv",
+                "xls",
+                "xlsx",
+            ],
             accept_multiple_files=True,
             key=f"document_uploader_{st.session_state.uploader_version}"
         )
