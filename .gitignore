@@ -44,3 +44,34 @@ appp.py
 requirements_tmp.txt
 requirementss.txt
 check_key.py.py
+
+# --- Scratch / handoff fix-notes (keep code, not the notes) ---
+*-FIX.txt
+*_FIX.txt
+*-FIXES.txt
+*-UPDATE.txt
+*-CHANGE*.txt
+*_UPDATE.txt
+CHANGES-MADE.txt
+FIRST_RUN*.txt
+*_README.txt
+APPOINTMENT*.txt
+BRAIN-STROKE-*.txt
+LOGIN-*.txt
+DOCTOR-*.txt
+HEART-*.txt
+CHATBOT*.txt
+DIAGNOSTIC-*.txt
+GOOGLE_SHEETS_FIX.txt
+INTEGRATED-*.txt
+INTEGRATION_*.txt
+SERVICE_ACCOUNT_*.txt
+
+# --- Generated server artifacts ---
+general_diagnostics/agentic_diagnostic_server.log
+**/medical_data.db
+**/stroke_history.db
+**/instance/*.db
+
+# --- Local smoke-test scripts ---
+test_gs.py

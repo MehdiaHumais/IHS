@@ -1415,6 +1415,17 @@ st.markdown(
             background: #F1DED0 !important;
             filter: brightness(0.97);
         }
+
+        /* Embedded Chatbot & Diagnostics: render as solid, elevated cards
+           instead of see-through floating panels. */
+        iframe[title="st.iframe"],
+        [data-testid="stIFrame"],
+        [data-testid="stCustomComponentV1"] {
+            background: #ffffff !important;
+            border: 1px solid #dbe4f0 !important;
+            border-radius: 16px !important;
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.10) !important;
+        }
 </style>
     """,
     unsafe_allow_html=True,
@@ -1429,8 +1440,8 @@ if BACKGROUND_IMAGE_DATA:
             [data-testid="stAppViewContainer"] {{
                 background-image:
                     linear-gradient(
-                        rgba(255, 255, 255, 0.68),
-                        rgba(248, 251, 255, 0.68)
+                        rgba(255, 255, 255, 0.95),
+                        rgba(248, 251, 255, 0.95)
                     ),
                     url("data:image/webp;base64,{BACKGROUND_IMAGE_DATA}") !important;
                 background-size: 800px 800px !important;
@@ -1470,10 +1481,9 @@ if BACKGROUND_IMAGE_DATA:
             }}
 
             div[data-baseweb="tab-list"] {{
-                background: rgba(255, 255, 255, 0.70);
+                background: rgba(255, 255, 255, 0.97);
                 border-radius: 12px;
                 padding: 0.15rem 0.35rem;
-                backdrop-filter: blur(4px);
             }}
         </style>
         """,
@@ -3443,7 +3453,7 @@ def breast_cancer_diagnosis_page():
             }
 
             .result-card {
-                background: rgba(255,255,255,0.78);
+                background: rgba(255,255,255,0.98);
                 border: 1px solid rgba(173,20,87,0.16);
                 border-radius: 18px;
                 padding: 18px 22px;
@@ -4057,7 +4067,7 @@ def user_dashboard_page() -> None:
 
             div[data-testid="stForm"],
             div[data-testid="stVerticalBlockBorderWrapper"] {
-                background: rgba(255, 255, 255, 0.58) !important;
+                background: rgba(255, 255, 255, 0.97) !important;
             }
         </style>
         """,
@@ -5225,19 +5235,19 @@ def patient_search_page() -> None:
             }
 
             .patient-search-hero {
-                background: rgba(255, 255, 255, 0.64) !important;
+                background: rgba(255, 255, 255, 0.96) !important;
                 border-color: rgba(39, 126, 96, 0.20) !important;
             }
 
             .search-tip-card,
             div[data-testid="stForm"],
             div[data-testid="stVerticalBlockBorderWrapper"] {
-                background: rgba(255, 255, 255, 0.62) !important;
+                background: rgba(255, 255, 255, 0.96) !important;
                 border-color: rgba(39, 126, 96, 0.20) !important;
             }
 
             div[data-testid="stTabs"] [data-baseweb="tab-list"] {
-                background: rgba(255, 255, 255, 0.62) !important;
+                background: rgba(255, 255, 255, 0.96) !important;
                 border-radius: 12px;
                 padding: 0.15rem 0.35rem;
             }
