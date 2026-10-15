@@ -5,6 +5,7 @@
 *.sh text eol=lf
 *.bat text eol=crlf
 *.ps1 text eol=crlf
+
 # --- Large binaries stored with Git LFS -------------------------------------
 # ML model artifacts
 *.pkl   filter=lfs diff=lfs merge=lfs -text
@@ -15,11 +16,13 @@
 *.pth   filter=lfs diff=lfs merge=lfs -text
 *.bin   filter=lfs diff=lfs merge=lfs -text
 *.safetensors filter=lfs diff=lfs merge=lfs -text
+
 # Archives
 *.zip   filter=lfs diff=lfs merge=lfs -text
 *.7z    filter=lfs diff=lfs merge=lfs -text
 *.tar   filter=lfs diff=lfs merge=lfs -text
 *.gz    filter=lfs diff=lfs merge=lfs -text
+
 # Media / design assets
 *.png   filter=lfs diff=lfs merge=lfs -text
 *.jpg   filter=lfs diff=lfs merge=lfs -text
@@ -28,28 +31,12 @@
 *.gif   filter=lfs diff=lfs merge=lfs -text
 *.pdf   filter=lfs diff=lfs merge=lfs -text
 *.mp4   filter=lfs diff=lfs merge=lfs -text
+
 # Local databases (should not normally be committed)
 *.db    filter=lfs diff=lfs merge=lfs -text
-*.sqlite filter=lfs diff=lfs merge=lfs -text
+*.sqlite  filter=lfs diff=lfs merge=lfs -text
 *.sqlite3 filter=lfs diff=lfs merge=lfs -text
+
 # --- Generated / vendored files hidden from diffs & language stats ----------
 __pycache__/** linguist-generated=true
 *.pyc linguist-generated=true
-*.pkl filter=lfs diff=lfs merge=lfs -text
-*.h5 filter=lfs diff=lfs merge=lfs -text
-*.onnx filter=lfs diff=lfs merge=lfs -text
-*.pt filter=lfs diff=lfs merge=lfs -text
-*.pth filter=lfs diff=lfs merge=lfs -text
-*.bin filter=lfs diff=lfs merge=lfs -text
-*.zip filter=lfs diff=lfs merge=lfs -text
-*.7z filter=lfs diff=lfs merge=lfs -text
-*.tar filter=lfs diff=lfs merge=lfs -text
-*.gz filter=lfs diff=lfs merge=lfs -text
-*.png filter=lfs diff=lfs merge=lfs -text
-*.jpg filter=lfs diff=lfs merge=lfs -text
-*.jpeg filter=lfs diff=lfs merge=lfs -text
-*.webp filter=lfs diff=lfs merge=lfs -text
-*.gif filter=lfs diff=lfs merge=lfs -text
-*.pdf filter=lfs diff=lfs merge=lfs -text
-*.mp4 filter=lfs diff=lfs merge=lfs -text
-*.db filter=lfs diff=lfs merge=lfs -text
