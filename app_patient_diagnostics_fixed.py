@@ -272,10 +272,17 @@ def _cloud_service_account_info() -> dict | None:
     read-only app folder, so a secret-backed dict (pasted in the secrets editor)
     is converted straight into google.auth credentials.
     """
+    def _normalize(sa_dict: dict) -> dict:
+        out = dict(sa_dict)
+        pk = out.get("private_key")
+        if isinstance(pk, str) and "\\n" in pk:
+            out["private_key"] = pk.replace("\\n", "\n")
+        return out
+
     disk = _secrets_from_disk_toml()
     sa = disk.get("service_account")
     if isinstance(sa, dict) and sa.get("client_email") and sa.get("private_key"):
-        return sa
+        return _normalize(sa)
 
     try:
         secrets = getattr(st, "secrets", None) or {}
@@ -289,7 +296,7 @@ def _cloud_service_account_info() -> dict | None:
         except Exception:
             sa = None
         if isinstance(sa, dict) and sa.get("client_email") and sa.get("private_key"):
-            return sa
+            return _normalize(sa)
 
     candidates: list[object] = []
     plain_secret = secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
@@ -307,7 +314,7 @@ def _cloud_service_account_info() -> dict | None:
             except (json.JSONDecodeError, TypeError):
                 continue
         if isinstance(info, dict) and info.get("client_email") and info.get("private_key"):
-            return info
+            return _normalize(info)
     return None
 
 
@@ -358,6 +365,8 @@ _materialize_cloud_files()
 def _read_cloud_deploy_flag() -> bool:
     """Detect Streamlit Cloud deployment without raising when no secrets.toml exists."""
     if os.environ.get("CLOUD_DEPLOY", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return True
+    if os.environ.get("STREAMLIT_SHARING_MODE") or str(BASE_DIR).startswith("/mount/src"):
         return True
     try:
         secrets = getattr(st, "secrets", None)
@@ -1609,35 +1618,39 @@ def password_matches(password: str, saved_hash: str, saved_salt: str) -> bool:
 
 
 def read_google_sheet_settings() -> tuple[str, str]:
-    """Read Google Sheet settings from the local google_config.json file."""
-    if not GOOGLE_CONFIG_FILE.exists():
-        raise FileNotFoundError(
-            "google_config.json was not found.\n"
-            f"Expected location: {GOOGLE_CONFIG_FILE}\n"
-            f"App location: {Path(__file__).resolve()}"
-        )
+    """Read Google Sheet settings from google_config.json or Streamlit secrets."""
+    config: dict = {}
+    if GOOGLE_CONFIG_FILE.exists():
+        try:
+            config = json.loads(
+                GOOGLE_CONFIG_FILE.read_text(encoding="utf-8-sig")
+            )
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                f"google_config.json is not valid JSON: {error}"
+            ) from error
 
-    try:
-        config = json.loads(
-            GOOGLE_CONFIG_FILE.read_text(encoding="utf-8-sig")
-        )
-    except json.JSONDecodeError as error:
-        raise ValueError(
-            f"google_config.json is not valid JSON: {error}"
-        ) from error
-
-    sheet_config = config.get("google_sheet", config)
+    sheet_config = config.get("google_sheet", config) if isinstance(config, dict) else {}
     spreadsheet_id = clean_text(sheet_config.get("spreadsheet_id"))
     worksheet_name = clean_text(
         sheet_config.get("worksheet_name")
     ) or "Users"
+
+    if not spreadsheet_id or spreadsheet_id == "PASTE_YOUR_SPREADSHEET_ID_HERE":
+        spreadsheet_id = clean_text(os.environ.get("GOOGLE_SHEET_ID", ""))
+        if not spreadsheet_id:
+            try:
+                secrets = getattr(st, "secrets", None) or {}
+                spreadsheet_id = clean_text(secrets.get("GOOGLE_SHEET_ID", ""))
+            except Exception:
+                spreadsheet_id = ""
 
     if (
         not spreadsheet_id
         or spreadsheet_id == "PASTE_YOUR_SPREADSHEET_ID_HERE"
     ):
         raise ValueError(
-            "Add your real Google spreadsheet ID to google_config.json."
+            "Add your real Google spreadsheet ID to google_config.json or GOOGLE_SHEET_ID in Streamlit secrets."
         )
 
     return spreadsheet_id, worksheet_name
@@ -1787,26 +1800,38 @@ def get_patients_worksheet():
     import gspread
     from google.oauth2.service_account import Credentials
 
-    if not SERVICE_ACCOUNT_FILE.exists():
-        raise FileNotFoundError(
-            "No Google service-account key was found in the project root or "
-            "clinical_chatbot folder. Restore the private key file, or set "
-            "GOOGLE_SERVICE_ACCOUNT_FILE, before using patient search."
-        )
-
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    credentials = Credentials.from_service_account_file(
-        str(SERVICE_ACCOUNT_FILE),
-        scopes=scopes,
-    )
+    service_account_info = _cloud_service_account_info()
+    if not service_account_info and SERVICE_ACCOUNT_FILE.exists():
+        credentials = Credentials.from_service_account_file(
+            str(SERVICE_ACCOUNT_FILE),
+            scopes=scopes,
+        )
+    elif service_account_info:
+        credentials = Credentials.from_service_account_info(
+            service_account_info,
+            scopes=scopes,
+        )
+    else:
+        raise FileNotFoundError(
+            "No Google service-account key was found in the project root, "
+            "clinical_chatbot folder, or Streamlit secrets. Restore the private key file "
+            "or configure [service_account] in Streamlit secrets before using patient search."
+        )
+
     client = gspread.authorize(credentials)
 
     spreadsheet_id, _ = read_google_sheet_settings()
-    config = json.loads(GOOGLE_CONFIG_FILE.read_text(encoding="utf-8-sig"))
-    sheet_config = config.get("google_sheet", config)
+    config: dict = {}
+    if GOOGLE_CONFIG_FILE.exists():
+        try:
+            config = json.loads(GOOGLE_CONFIG_FILE.read_text(encoding="utf-8-sig"))
+        except Exception:
+            config = {}
+    sheet_config = config.get("google_sheet", config) if isinstance(config, dict) else {}
     patient_worksheet_name = clean_text(
         sheet_config.get("patient_worksheet_name")
     ) or "Patients"

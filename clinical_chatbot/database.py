@@ -148,6 +148,69 @@ DB_ERROR: Optional[str] = None
 _lock = threading.Lock()
 
 
+def _resolve_sheet_id() -> str:
+    env_id = (os.environ.get("GOOGLE_SHEET_ID") or "").strip()
+    if env_id:
+        return env_id
+    proj = _read_project_google_config()
+    proj_id = str(proj.get("spreadsheet_id") or "").strip()
+    if proj_id:
+        return proj_id
+    try:
+        import streamlit as st
+        sec_id = st.secrets.get("GOOGLE_SHEET_ID")
+        if sec_id:
+            return str(sec_id).strip()
+        gc = st.secrets.get("google_config") or {}
+        gs = gc.get("google_sheet") if isinstance(gc, dict) else {}
+        if isinstance(gs, dict) and gs.get("spreadsheet_id"):
+            return str(gs["spreadsheet_id"]).strip()
+    except Exception:
+        pass
+    return SHEET_ID
+
+
+def _resolve_service_account_path() -> Path:
+    raw = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE") or "service_account.json").strip()
+    path = Path(raw)
+    if path.is_absolute():
+        return path
+    root_candidate = PROJECT_DIR / path.name
+    local_candidate = BASE_DIR / path
+    return root_candidate if root_candidate.is_file() else local_candidate
+
+
+def _resolve_service_account_info() -> Optional[dict]:
+    env_json = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON") or "").strip()
+    if env_json:
+        try:
+            info = json.loads(env_json)
+            if isinstance(info, dict) and info.get("client_email") and info.get("private_key"):
+                info = dict(info)
+                info["private_key"] = str(info["private_key"]).replace("\\n", "\n")
+                return info
+        except Exception:
+            pass
+    try:
+        import streamlit as st
+        sa = st.secrets.get("service_account")
+        if sa:
+            info = dict(sa)
+            if info.get("client_email") and info.get("private_key"):
+                info["private_key"] = str(info["private_key"]).replace("\\n", "\n")
+                return info
+        sec_json = st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+        if isinstance(sec_json, str) and sec_json.strip():
+            info = json.loads(sec_json)
+            if isinstance(info, dict) and info.get("client_email") and info.get("private_key"):
+                info = dict(info)
+                info["private_key"] = str(info["private_key"]).replace("\\n", "\n")
+                return info
+    except Exception:
+        pass
+    return None
+
+
 def _connect_google_sheets() -> bool:
     """(Re)connect to the configured Google Sheet.
 
@@ -155,13 +218,20 @@ def _connect_google_sheets() -> bool:
     chatbot permanently disconnected for the lifetime of the server process.
     Every DB access can call this function and recover automatically.
     """
-    global _client, _spreadsheet, DB_ERROR
+    global _client, _spreadsheet, DB_ERROR, SHEET_ID, SERVICE_ACCOUNT_FILE
     try:
+        SHEET_ID = _resolve_sheet_id()
         if not SHEET_ID:
             raise RuntimeError("GOOGLE_SHEET_ID is not configured")
-        if not Path(SERVICE_ACCOUNT_FILE).is_file():
+        resolved_path = _resolve_service_account_path()
+        SERVICE_ACCOUNT_FILE = str(resolved_path)
+        sa_info = _resolve_service_account_info()
+        if resolved_path.is_file():
+            creds = Credentials.from_service_account_file(str(resolved_path), scopes=SCOPES)
+        elif sa_info:
+            creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
+        else:
             raise RuntimeError(f"Google service-account file was not found: {SERVICE_ACCOUNT_FILE}")
-        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
         client = gspread.authorize(creds)
         spreadsheet = _call_with_retry(client.open_by_key, SHEET_ID)
         _client = client
@@ -183,7 +253,7 @@ def _connect_google_sheets() -> bool:
 # connection lazily instead.
 if not SHEET_ID:
     DB_ERROR = "GOOGLE_SHEET_ID is not configured"
-elif not Path(SERVICE_ACCOUNT_FILE).is_file():
+elif not Path(SERVICE_ACCOUNT_FILE).is_file() and _resolve_service_account_info() is None:
     DB_ERROR = f"Google service-account file was not found: {SERVICE_ACCOUNT_FILE}"
 else:
     DB_ERROR = "Google Sheets connection has not been attempted yet."

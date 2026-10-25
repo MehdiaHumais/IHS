@@ -179,8 +179,183 @@ def _resolve_service_account_file() -> Path:
     return BASE_DIR / "service_account.json"
 
 
+import tempfile
+
 SERVICE_ACCOUNT_FILE = _resolve_service_account_file()
 GOOGLE_CONFIG_FILE = BASE_DIR / "google_config.json"
+
+
+def _secrets_from_disk_toml() -> dict:
+    """Read the Streamlit secrets file directly and parse it as TOML."""
+    try:
+        import tomllib  # type: ignore[import-not-found]
+    except ImportError:
+        try:
+            import tomli as tomllib  # type: ignore[no-redef]
+        except ImportError:
+            return {}
+    for path in (
+        Path.home() / ".streamlit" / "secrets.toml",
+        BASE_DIR / ".streamlit" / "secrets.toml",
+    ):
+        try:
+            if not path.exists():
+                continue
+            with path.open("rb") as handle:
+                data = tomllib.load(handle)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            continue
+    return {}
+
+
+def _credential_payloads() -> dict[str, object]:
+    """Collect the Google credentials from Streamlit secrets or environment variables."""
+    try:
+        secrets = getattr(st, "secrets", None) or {}
+    except Exception:
+        secrets = {}
+
+    payloads: dict[str, object] = {}
+
+    disk = _secrets_from_disk_toml()
+    disk_sa = disk.get("service_account")
+    if isinstance(disk_sa, dict) and disk_sa.get("client_email") and disk_sa.get("private_key"):
+        sa_copy = dict(disk_sa)
+        sa_copy["private_key"] = str(sa_copy["private_key"]).replace("\\n", "\n")
+        payloads.setdefault("service_account.json", sa_copy)
+    disk_gc = disk.get("google_config")
+    if isinstance(disk_gc, dict):
+        payloads.setdefault("google_config.json", disk_gc)
+
+    def _coerce(value: object) -> dict | None:
+        if value is None:
+            return None
+        try:
+            return dict(value)
+        except Exception:
+            return None
+
+    service_account = _coerce(secrets.get("service_account"))
+    if service_account and service_account.get("client_email") and service_account.get("private_key"):
+        sa_copy = dict(service_account)
+        sa_copy["private_key"] = str(sa_copy["private_key"]).replace("\\n", "\n")
+        payloads.setdefault("service_account.json", sa_copy)
+    google_config = _coerce(secrets.get("google_config"))
+    if google_config:
+        payloads.setdefault("google_config.json", google_config)
+
+    env_service_account = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "") or ""
+    plain_secret_account = secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if isinstance(plain_secret_account, str):
+        env_service_account = env_service_account or plain_secret_account
+    if env_service_account:
+        payloads.setdefault("service_account.json", env_service_account)
+
+    env_google_config = os.environ.get("GOOGLE_CONFIG_JSON", "") or ""
+    plain_secret_config = secrets.get("GOOGLE_CONFIG_JSON")
+    if isinstance(plain_secret_config, str):
+        env_google_config = env_google_config or plain_secret_config
+    if env_google_config:
+        payloads.setdefault("google_config.json", env_google_config)
+
+    return payloads
+
+
+def _cloud_service_account_info() -> dict | None:
+    """Return an in-memory Google service-account dict from Streamlit secrets or env."""
+    disk = _secrets_from_disk_toml()
+    sa = disk.get("service_account")
+    if isinstance(sa, dict) and sa.get("client_email") and sa.get("private_key"):
+        sa_copy = dict(sa)
+        sa_copy["private_key"] = str(sa_copy["private_key"]).replace("\\n", "\n")
+        return sa_copy
+
+    try:
+        secrets = getattr(st, "secrets", None) or {}
+    except Exception:
+        secrets = {}
+
+    sa = secrets.get("service_account")
+    if sa:
+        try:
+            sa = dict(sa)
+        except Exception:
+            sa = None
+        if isinstance(sa, dict) and sa.get("client_email") and sa.get("private_key"):
+            sa["private_key"] = str(sa["private_key"]).replace("\\n", "\n")
+            return sa
+
+    candidates: list[object] = []
+    plain_secret = secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if isinstance(plain_secret, str) and plain_secret.strip():
+        candidates.append(plain_secret)
+    env_payload = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    if env_payload.strip():
+        candidates.append(env_payload)
+
+    for candidate in candidates:
+        info = candidate
+        if isinstance(info, str):
+            try:
+                info = json.loads(info)
+            except (json.JSONDecodeError, TypeError):
+                continue
+        if isinstance(info, dict) and info.get("client_email") and info.get("private_key"):
+            info = dict(info)
+            info["private_key"] = str(info["private_key"]).replace("\\n", "\n")
+            return info
+    return None
+
+
+def _materialize_cloud_files() -> None:
+    temp_dir = Path(tempfile.gettempdir())
+    for file_name, payload in _credential_payloads().items():
+        base_path = BASE_DIR / file_name
+        if base_path.exists():
+            continue
+        text = payload if isinstance(payload, str) else json.dumps(payload, indent=2)
+
+        bound_path = base_path
+        try:
+            base_path.parent.mkdir(parents=True, exist_ok=True)
+            base_path.write_text(text, encoding="utf-8")
+        except OSError:
+            bound_path = temp_dir / file_name
+            try:
+                bound_path.write_text(text, encoding="utf-8")
+            except OSError:
+                continue
+
+        if file_name == "service_account.json":
+            globals()["SERVICE_ACCOUNT_FILE"] = bound_path
+            os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"] = str(bound_path)
+        else:
+            globals()["GOOGLE_CONFIG_FILE"] = bound_path
+
+
+_materialize_cloud_files()
+
+
+def _read_cloud_deploy_flag() -> bool:
+    """Detect Streamlit Cloud deployment automatically or via secrets/env."""
+    if os.environ.get("CLOUD_DEPLOY", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return True
+    if os.environ.get("STREAMLIT_SHARING_MODE") or str(BASE_DIR).startswith("/mount/src"):
+        return True
+    try:
+        secrets = getattr(st, "secrets", None)
+        if secrets is not None:
+            app = secrets.get("app") or {}
+            if bool(app.get("cloud", False)):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+CLOUD_DEPLOY = _read_cloud_deploy_flag()
 
 
 # Supplied Heart Disease Diagnosis model and dataset.
@@ -1419,35 +1594,39 @@ def password_matches(password: str, saved_hash: str, saved_salt: str) -> bool:
 
 
 def read_google_sheet_settings() -> tuple[str, str]:
-    """Read Google Sheet settings from the local google_config.json file."""
-    if not GOOGLE_CONFIG_FILE.exists():
-        raise FileNotFoundError(
-            "google_config.json was not found.\n"
-            f"Expected location: {GOOGLE_CONFIG_FILE}\n"
-            f"App location: {Path(__file__).resolve()}"
-        )
+    """Read Google Sheet settings from google_config.json or Streamlit secrets."""
+    config: dict = {}
+    if GOOGLE_CONFIG_FILE.exists():
+        try:
+            config = json.loads(
+                GOOGLE_CONFIG_FILE.read_text(encoding="utf-8-sig")
+            )
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                f"google_config.json is not valid JSON: {error}"
+            ) from error
 
-    try:
-        config = json.loads(
-            GOOGLE_CONFIG_FILE.read_text(encoding="utf-8-sig")
-        )
-    except json.JSONDecodeError as error:
-        raise ValueError(
-            f"google_config.json is not valid JSON: {error}"
-        ) from error
-
-    sheet_config = config.get("google_sheet", config)
+    sheet_config = config.get("google_sheet", config) if isinstance(config, dict) else {}
     spreadsheet_id = clean_text(sheet_config.get("spreadsheet_id"))
     worksheet_name = clean_text(
         sheet_config.get("worksheet_name")
     ) or "Users"
+
+    if not spreadsheet_id or spreadsheet_id == "PASTE_YOUR_SPREADSHEET_ID_HERE":
+        spreadsheet_id = clean_text(os.environ.get("GOOGLE_SHEET_ID", ""))
+        if not spreadsheet_id:
+            try:
+                secrets = getattr(st, "secrets", None) or {}
+                spreadsheet_id = clean_text(secrets.get("GOOGLE_SHEET_ID", ""))
+            except Exception:
+                spreadsheet_id = ""
 
     if (
         not spreadsheet_id
         or spreadsheet_id == "PASTE_YOUR_SPREADSHEET_ID_HERE"
     ):
         raise ValueError(
-            "Add your real Google spreadsheet ID to google_config.json."
+            "Add your real Google spreadsheet ID to google_config.json or GOOGLE_SHEET_ID in Streamlit secrets."
         )
 
     return spreadsheet_id, worksheet_name
@@ -1464,10 +1643,27 @@ def get_users_worksheet():
         "https://www.googleapis.com/auth/drive",
     ]
 
-    # This desktop version must use the JSON file beside app.py.
-    # Do not silently fall back to Streamlit secrets because that can
-    # produce the misleading "service account info" missing-fields error.
-    if not SERVICE_ACCOUNT_FILE.exists():
+    credentials = None
+    service_account_info = _cloud_service_account_info()
+    if not service_account_info and SERVICE_ACCOUNT_FILE.exists():
+        try:
+            credentials = Credentials.from_service_account_file(
+                str(SERVICE_ACCOUNT_FILE),
+                scopes=scopes,
+            )
+        except Exception as error:
+            raise ValueError(
+                "The service-account file was found, but Google could not "
+                "read it.\n"
+                f"File being used: {SERVICE_ACCOUNT_FILE}\n"
+                f"Original error: {error}"
+            ) from error
+    elif service_account_info:
+        credentials = Credentials.from_service_account_info(
+            service_account_info,
+            scopes=scopes,
+        )
+    else:
         files_in_app_folder = ", ".join(
             sorted(path.name for path in BASE_DIR.iterdir())
         )
@@ -1475,23 +1671,10 @@ def get_users_worksheet():
             "No Google service-account key could be found.\n"
             f"Checked: {BASE_DIR / 'service_account.json'}\n"
             f"Also checked: {BASE_DIR / 'clinical_chatbot' / 'service_account.json'}\n"
-            "You may also set GOOGLE_SERVICE_ACCOUNT_FILE to the key path.\n"
+            "You may also set GOOGLE_SERVICE_ACCOUNT_FILE or configure [service_account] in Streamlit secrets.\n"
             f"App being executed: {Path(__file__).resolve()}\n"
             f"Files found in that folder: {files_in_app_folder}"
         )
-
-    try:
-        credentials = Credentials.from_service_account_file(
-            str(SERVICE_ACCOUNT_FILE),
-            scopes=scopes,
-        )
-    except Exception as error:
-        raise ValueError(
-            "The service-account file was found, but Google could not "
-            "read it.\n"
-            f"File being used: {SERVICE_ACCOUNT_FILE}\n"
-            f"Original error: {error}"
-        ) from error
 
     client = gspread.authorize(credentials)
     spreadsheet_id, worksheet_name = read_google_sheet_settings()
@@ -1507,9 +1690,13 @@ def get_users_worksheet():
         ) from error
     except (gspread.exceptions.APIError, PermissionError) as error:
         # Provide a clearer message when Google returns a 403 / permission error
+        client_email = None
         try:
-            sa_info = json.loads(SERVICE_ACCOUNT_FILE.read_text(encoding="utf-8"))
-            client_email = sa_info.get("client_email")
+            sa_info = _cloud_service_account_info()
+            if not sa_info and SERVICE_ACCOUNT_FILE.exists():
+                sa_info = json.loads(SERVICE_ACCOUNT_FILE.read_text(encoding="utf-8"))
+            if sa_info:
+                client_email = sa_info.get("client_email")
         except Exception:
             client_email = None
 
@@ -1561,26 +1748,38 @@ def get_patients_worksheet():
     import gspread
     from google.oauth2.service_account import Credentials
 
-    if not SERVICE_ACCOUNT_FILE.exists():
-        raise FileNotFoundError(
-            "No Google service-account key was found in the project root or "
-            "clinical_chatbot folder. Restore the private key file, or set "
-            "GOOGLE_SERVICE_ACCOUNT_FILE, before using patient search."
-        )
-
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    credentials = Credentials.from_service_account_file(
-        str(SERVICE_ACCOUNT_FILE),
-        scopes=scopes,
-    )
+    service_account_info = _cloud_service_account_info()
+    if not service_account_info and SERVICE_ACCOUNT_FILE.exists():
+        credentials = Credentials.from_service_account_file(
+            str(SERVICE_ACCOUNT_FILE),
+            scopes=scopes,
+        )
+    elif service_account_info:
+        credentials = Credentials.from_service_account_info(
+            service_account_info,
+            scopes=scopes,
+        )
+    else:
+        raise FileNotFoundError(
+            "No Google service-account key was found in the project root, "
+            "clinical_chatbot folder, or Streamlit secrets. Restore the private key file "
+            "or configure [service_account] in Streamlit secrets before using patient search."
+        )
+
     client = gspread.authorize(credentials)
 
     spreadsheet_id, _ = read_google_sheet_settings()
-    config = json.loads(GOOGLE_CONFIG_FILE.read_text(encoding="utf-8-sig"))
-    sheet_config = config.get("google_sheet", config)
+    config: dict = {}
+    if GOOGLE_CONFIG_FILE.exists():
+        try:
+            config = json.loads(GOOGLE_CONFIG_FILE.read_text(encoding="utf-8-sig"))
+        except Exception:
+            config = {}
+    sheet_config = config.get("google_sheet", config) if isinstance(config, dict) else {}
     patient_worksheet_name = clean_text(
         sheet_config.get("patient_worksheet_name")
     ) or "Patients"
@@ -4419,45 +4618,14 @@ def _ensure_clinical_chatbot_server() -> tuple[bool, str, int]:
 
 
 def clinical_chatbot_page() -> None:
-    """Render the original chatbot UI inside SMART CDSS."""
+    """Render the Clinical Chatbot as an in-process Streamlit page.
+
+    The chatbot no longer depends on the bundled FastAPI companion server,
+    so the same interface works locally and in the hosted cloud build.
+    """
     top_navigation("Clinical Chatbot")
-
-    if st.button("← Back to dashboard", key="chatbot_back_dashboard"):
-        st.session_state.active_page = "dashboard"
-        st.rerun()
-
-    running, error_message, chatbot_port = _ensure_clinical_chatbot_server()
-    if not running:
-        st.error("The Clinical Chatbot interface could not be loaded.")
-        with st.expander("Technical error"):
-            st.code(error_message)
-        return
-
-    import streamlit.components.v1 as components
-    from urllib.parse import urlencode
-
-    current_user = st.session_state.get("current_user", {})
-    chatbot_params = {
-        "patient_id": clean_text(current_user.get("user_id")),
-        "name": clean_text(current_user.get("full_name")),
-    }
-    if current_user_is_doctor():
-        chatbot_params["role"] = "doctor"
-
-    # Include the backend build in the iframe URL. A new project build now
-    # produces a different URL, forcing the browser/Streamlit iframe to load
-    # the matching HTML instead of reusing a cached older chatbot page.
-    chatbot_params["build"] = CHATBOT_BUILD_ID
-    chatbot_url = (
-        f"http://127.0.0.1:{chatbot_port}/?"
-        + urlencode(chatbot_params)
-    )
-
-    components.iframe(
-        chatbot_url,
-        height=900,
-        scrolling=True,
-    )
+    from clinical_chatbot_streamlit import render_clinical_chatbot_page
+    render_clinical_chatbot_page()
 
 
 def brain_stroke_diagnosis_page() -> None:

@@ -60,6 +60,7 @@ LLM_FALLBACK_ORDER = [
     "cerebras",
     "gemini",
     "openrouter",
+    "openai",
     "ollama",
 ]
 
@@ -67,6 +68,9 @@ LLM_FALLBACK_ORDER = [
 # Kept modest so free/on-demand provider tiers (Groq OTPM, OpenRouter balance
 # remnants) accept every request instead of returning hard rejections.
 _LLM_MAX_OUTPUT_TOKENS = 900
+
+_INVALID_GROQ_MODELS = {"", "qwen/qwen3.8-27b"}
+_INVALID_GEMINI_MODELS = {"", "gemini-3.1-flash-lite", "gemini-1.5-flash", "gemini-1.5-pro"}
 
 
 def _normalize_ollama_base_url(url: str) -> str:
@@ -76,23 +80,36 @@ def _normalize_ollama_base_url(url: str) -> str:
     return url
 
 
+def _is_direct_tools_mode() -> bool:
+    return (
+        CDSS_DIRECT_TOOLS
+        or os.environ.get("CDSS_DIRECT_TOOLS", "").strip().lower() in {"1", "true", "yes", "on"}
+    )
+
+
 def _build_llm(provider: str):
 
     if provider == "ollama":
-        raw_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+        raw_url = (os.environ.get("OLLAMA_BASE_URL") or "").strip()
+        if not raw_url:
+            return None
+        if _is_direct_tools_mode() and ("localhost" in raw_url or "127.0.0.1" in raw_url):
+            return None
         return ChatOllama(
-            model=os.environ.get("OLLAMA_MODEL", "qwen2.5:1.5b"),
+            model=(os.environ.get("OLLAMA_MODEL") or "").strip() or "qwen2.5:1.5b",
             base_url=_normalize_ollama_base_url(raw_url),
             temperature=0,
             validate_model_on_init=False,
         )
-        
+
     if provider == "groq":
-        key = os.environ.get("GROQ_API_KEY")
+        key = (os.environ.get("GROQ_API_KEY") or "").strip()
         if not key:
             return None
+        raw_model = (os.environ.get("GROQ_MODEL") or "").strip()
+        model = "llama-3.3-70b-versatile" if raw_model in _INVALID_GROQ_MODELS else raw_model
         return ChatGroq(
-            model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            model=model,
             api_key=key,
             temperature=0,
             # Free/on-demand Groq tiers enforce an output-tokens-per-minute
@@ -102,11 +119,12 @@ def _build_llm(provider: str):
         )
 
     if provider == "cerebras":
-        key = os.environ.get("CEREBRAS_API_KEY")
+        key = (os.environ.get("CEREBRAS_API_KEY") or "").strip()
         if not key:
             return None
+        model = (os.environ.get("CEREBRAS_MODEL") or "").strip() or "llama-3.3-70b"
         return ChatOpenAI(
-            model=os.environ.get("CEREBRAS_MODEL", "llama-3.3-70b"),
+            model=model,
             api_key=key,
             base_url="https://api.cerebras.ai/v1",
             temperature=0,
@@ -114,11 +132,12 @@ def _build_llm(provider: str):
         )
 
     if provider == "openrouter":
-        key = os.environ.get("OPENROUTER_API_KEY")
+        key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
         if not key:
             return None
+        model = (os.environ.get("OPENROUTER_MODEL") or "").strip() or "meta-llama/llama-3.3-70b-instruct"
         return ChatOpenAI(
-            model=os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct"),
+            model=model,
             api_key=key,
             base_url="https://openrouter.ai/api/v1",
             temperature=0,
@@ -127,13 +146,26 @@ def _build_llm(provider: str):
             max_tokens=_LLM_MAX_OUTPUT_TOKENS,
         )
 
+    if provider == "openai":
+        key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+        if not key or key.lower() == "ollama":
+            return None
+        model = (os.environ.get("OPENAI_MODEL") or "").strip() or "gpt-4o-mini"
+        return ChatOpenAI(
+            model=model,
+            api_key=key,
+            temperature=0,
+            max_tokens=_LLM_MAX_OUTPUT_TOKENS,
+        )
 
     if provider == "gemini":
-        key = os.environ.get("GEMINI_API_KEY")
+        key = (os.environ.get("GEMINI_API_KEY") or "").strip()
         if not key:
             return None
+        raw_model = (os.environ.get("GEMINI_MODEL") or "").strip()
+        model = "gemini-2.0-flash" if raw_model in _INVALID_GEMINI_MODELS else raw_model
         return ChatGoogleGenerativeAI(
-            model=os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite"),
+            model=model,
             google_api_key=key,
             temperature=0,
             max_output_tokens=_LLM_MAX_OUTPUT_TOKENS,
@@ -142,11 +174,28 @@ def _build_llm(provider: str):
 
 
 _llm_chain_cache: Optional[list] = None
+_llm_chain_env_sig: Optional[tuple] = None
+
+
+def _current_llm_env_signature() -> tuple:
+    return tuple(
+        (k, os.environ.get(k, ""))
+        for k in (
+            "GROQ_API_KEY", "GROQ_MODEL",
+            "CEREBRAS_API_KEY", "CEREBRAS_MODEL",
+            "GEMINI_API_KEY", "GEMINI_MODEL",
+            "OPENROUTER_API_KEY", "OPENROUTER_MODEL",
+            "OPENAI_API_KEY", "OPENAI_MODEL",
+            "OLLAMA_BASE_URL", "OLLAMA_MODEL",
+            "CDSS_DIRECT_TOOLS",
+        )
+    )
 
 
 def _get_llm_chain():
-    global _llm_chain_cache
-    if _llm_chain_cache is None:
+    global _llm_chain_cache, _llm_chain_env_sig
+    sig = _current_llm_env_signature()
+    if _llm_chain_cache is None or _llm_chain_env_sig != sig:
         ordered_providers = [LLM_PROVIDER] + [p for p in LLM_FALLBACK_ORDER if p != LLM_PROVIDER]
         chain = []
         for provider in ordered_providers:
@@ -155,10 +204,14 @@ def _get_llm_chain():
                 chain.append((provider, instance))
         if not chain:
             raise RuntimeError(
-                "No LLM providers are configured. Set GROQ_API_KEY, "
-                "OPENROUTER_API_KEY, or ensure Ollama is running (OLLAMA_BASE_URL)."
+                "No LLM providers are configured. Set GROQ_API_KEY, GEMINI_API_KEY, "
+                "CEREBRAS_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY in Streamlit Secrets."
             )
         _llm_chain_cache = chain
+        _llm_chain_env_sig = sig
+        _symptom_agents.clear()
+        _medication_agents.clear()
+        _appointment_agents.clear()
     return _llm_chain_cache
 
 
@@ -246,7 +299,7 @@ async def _get_all_mcp_tools():
     if _all_mcp_tools_cache is not None:
         return _all_mcp_tools_cache
 
-    if CDSS_DIRECT_TOOLS:
+    if _is_direct_tools_mode():
         _all_mcp_tools_cache = _build_direct_tools()
         return _all_mcp_tools_cache
 
@@ -2038,10 +2091,12 @@ async def run_patient_medication_then_appointment(patient_id: str, complaint: st
 # this is a single-shot multimodal read, not a multi-step tool workflow.
 
 def _build_vision_llm():
-    key = os.environ.get("GEMINI_API_KEY")
+    key = (os.environ.get("GEMINI_API_KEY") or "").strip()
     if key:
+        raw_model = (os.environ.get("GEMINI_VISION_MODEL") or "").strip()
+        model = "gemini-2.5-flash" if raw_model in _INVALID_GEMINI_MODELS else raw_model
         return ChatOpenAI(
-            model=os.environ.get("GEMINI_VISION_MODEL", "gemini-2.5-flash"),
+            model=model,
             temperature=0, api_key=key,
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         )

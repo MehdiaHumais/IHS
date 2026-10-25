@@ -12,35 +12,106 @@ import streamlit as st
 _BRIDGE_DIR = Path(__file__).resolve().parent
 _CHATBOT_DIR = _BRIDGE_DIR / "clinical_chatbot"
 
+import threading
+
 _LLM_ENV_KEYS = [
     "GROQ_API_KEY", "GROQ_MODEL",
     "CEREBRAS_API_KEY", "CEREBRAS_MODEL",
     "GEMINI_API_KEY", "GEMINI_MODEL", "GEMINI_VISION_MODEL",
     "OPENROUTER_API_KEY", "OPENROUTER_MODEL",
+    "OPENAI_API_KEY", "OPENAI_MODEL",
     "OLLAMA_BASE_URL", "OLLAMA_MODEL",
 ]
 
-_ASYNC_LOOP = None
+_SA_ALLOWED_KEYS = {
+    "type", "project_id", "private_key_id", "private_key",
+    "client_email", "client_id", "auth_uri", "token_uri",
+    "auth_provider_x509_cert_url", "client_x509_cert_url", "universe_domain",
+}
+
+_ASYNC_LOOP: asyncio.AbstractEventLoop | None = None
+_ASYNC_LOCK = threading.Lock()
 _cached = None
+_schema_ensured = False
+
+
+def _read_all_secrets_sources() -> list[dict]:
+    sources: list[dict] = []
+    try:
+        secrets_obj = getattr(st, "secrets", None)
+        if secrets_obj is not None:
+            sources.append(dict(secrets_obj))
+    except Exception:
+        pass
+    try:
+        import tomllib
+    except ImportError:
+        try:
+            import tomli as tomllib  # type: ignore[no-redef]
+        except ImportError:
+            tomllib = None
+    if tomllib is not None:
+        for candidate in (
+            Path.home() / ".streamlit" / "secrets.toml",
+            _BRIDGE_DIR / ".streamlit" / "secrets.toml",
+        ):
+            try:
+                if candidate.is_file():
+                    with candidate.open("rb") as handle:
+                        parsed = tomllib.load(handle)
+                    if isinstance(parsed, dict):
+                        sources.append(parsed)
+            except Exception:
+                continue
+    return sources
+
+
+def _find_secret_key(sources: list[dict], key: str):
+    """Look up a secret key at top-level first, then inside nested TOML tables
+    (in case the user pasted API keys below [service_account] in Secrets)."""
+    for src in sources:
+        val = src.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    for src in sources:
+        for sub in src.values():
+            try:
+                sub_dict = dict(sub) if hasattr(sub, "keys") else None
+            except Exception:
+                sub_dict = None
+            if isinstance(sub_dict, dict):
+                val = sub_dict.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+    return None
 
 
 def _ensure_cloud_env() -> None:
-    try:
-        cfg = st.secrets.get("google_config", {})
-    except Exception:
-        cfg = {}
-    gs = cfg.get("google_sheet", {}) if isinstance(cfg, dict) else {}
-    if isinstance(gs, dict) and gs.get("spreadsheet_id"):
-        os.environ.setdefault("GOOGLE_SHEET_ID", str(gs["spreadsheet_id"]))
-    for key in _LLM_ENV_KEYS:
-        if os.environ.get(key):
-            continue
+    sources = _read_all_secrets_sources()
+    sheet_id = _find_secret_key(sources, "GOOGLE_SHEET_ID")
+    if sheet_id:
+        os.environ.setdefault("GOOGLE_SHEET_ID", sheet_id)
+    for src in sources:
+        cfg = src.get("google_config")
         try:
-            value = st.secrets.get(key)
+            cfg = dict(cfg) if cfg is not None else {}
         except Exception:
-            value = None
+            cfg = {}
+        gs = cfg.get("google_sheet", {}) if isinstance(cfg, dict) else {}
+        try:
+            gs = dict(gs) if gs is not None else {}
+        except Exception:
+            gs = {}
+        if isinstance(gs, dict) and gs.get("spreadsheet_id"):
+            os.environ.setdefault("GOOGLE_SHEET_ID", str(gs["spreadsheet_id"]).strip())
+
+    for key in _LLM_ENV_KEYS:
+        existing = (os.environ.get(key) or "").strip()
+        if existing and not (key == "OPENAI_API_KEY" and existing.lower() == "ollama"):
+            continue
+        value = _find_secret_key(sources, key)
         if value:
-            os.environ[key] = str(value)
+            os.environ[key] = str(value).strip()
 
 
 def _resolve_service_account_file() -> str:
@@ -55,12 +126,32 @@ def _resolve_service_account_file() -> str:
         if path.is_file():
             os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"] = str(path)
             return str(path)
-    try:
-        sa = st.secrets.get("service_account")
-    except Exception:
-        sa = None
-    if sa:
-        payload = dict(sa)
+
+    sources = _read_all_secrets_sources()
+    sa = None
+    for src in sources:
+        raw_sa = src.get("service_account")
+        if raw_sa:
+            try:
+                sa = dict(raw_sa)
+                if sa.get("client_email") and sa.get("private_key"):
+                    break
+            except Exception:
+                sa = None
+    if not sa:
+        raw_json = _find_secret_key(sources, "GOOGLE_SERVICE_ACCOUNT_JSON")
+        if raw_json:
+            try:
+                parsed = json.loads(raw_json)
+                if isinstance(parsed, dict) and parsed.get("client_email") and parsed.get("private_key"):
+                    sa = parsed
+            except Exception:
+                sa = None
+
+    if sa and sa.get("client_email") and sa.get("private_key"):
+        payload = {k: v for k, v in sa.items() if k in _SA_ALLOWED_KEYS or isinstance(v, str)}
+        payload["private_key"] = str(payload["private_key"]).replace("\\n", "\n")
+        payload.setdefault("type", "service_account")
         fd, path = tempfile.mkstemp(suffix="-service-account.json")
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(payload, handle)
@@ -86,12 +177,12 @@ def _load_chatbot_agents():
 
 
 def ensure_chatbot_ready() -> dict:
-    global _cached
-    if _cached is not None:
-        return _cached
+    global _cached, _schema_ensured
     os.environ["CDSS_DIRECT_TOOLS"] = "1"
     _ensure_cloud_env()
     _resolve_service_account_file()
+    if _cached is not None:
+        return _cached
     chatbot_dir = str(_CHATBOT_DIR)
     if chatbot_dir not in sys.path:
         sys.path.insert(0, chatbot_dir)
@@ -106,11 +197,21 @@ def ensure_chatbot_ready() -> dict:
     return _cached
 
 
-def _run_async(coro):
+def _get_background_loop() -> asyncio.AbstractEventLoop:
     global _ASYNC_LOOP
-    if _ASYNC_LOOP is None or _ASYNC_LOOP.is_closed():
-        _ASYNC_LOOP = asyncio.new_event_loop()
-    return _ASYNC_LOOP.run_until_complete(coro)
+    with _ASYNC_LOCK:
+        if _ASYNC_LOOP is None or _ASYNC_LOOP.is_closed() or not _ASYNC_LOOP.is_running():
+            loop = asyncio.new_event_loop()
+            thread = threading.Thread(target=loop.run_forever, daemon=True, name="cdss-chatbot-async")
+            thread.start()
+            _ASYNC_LOOP = loop
+        return _ASYNC_LOOP
+
+
+def _run_async(coro):
+    loop = _get_background_loop()
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    return future.result(timeout=200)
 
 
 def _init_state() -> None:
@@ -635,18 +736,21 @@ def _configured_provider_names() -> list:
         "CEREBRAS_API_KEY": "Cerebras",
         "GEMINI_API_KEY": "Gemini",
         "OPENROUTER_API_KEY": "OpenRouter",
+        "OPENAI_API_KEY": "OpenAI",
     }
     names = []
     for key, name in mapping.items():
-        value = os.environ.get(key) or os.environ.get(key.replace("_API_KEY", "_KEY")) or ""
-        if value:
+        value = (os.environ.get(key) or os.environ.get(key.replace("_API_KEY", "_KEY")) or "").strip()
+        if value and not (key == "OPENAI_API_KEY" and value.lower() == "ollama"):
             names.append(name)
-    if os.environ.get("OLLAMA_BASE_URL"):
+    ollama_url = (os.environ.get("OLLAMA_BASE_URL") or "").strip()
+    if ollama_url and "localhost" not in ollama_url and "127.0.0.1" not in ollama_url:
         names.append("Ollama")
     return names
 
 
 def render_clinical_chatbot_page() -> None:
+    global _schema_ensured
     _init_state()
 
     st.markdown("### 💬 Clinical Chatbot")
@@ -671,13 +775,20 @@ def render_clinical_chatbot_page() -> None:
         )
         return
 
+    if not _schema_ensured:
+        try:
+            cb["database"].ensure_schema()
+            _schema_ensured = True
+        except Exception:
+            pass
+
     configured = _configured_provider_names()
     if not configured:
         st.warning(
             "No AI provider is configured yet. Add GROQ_API_KEY, CEREBRAS_API_KEY, "
-            "GEMINI_API_KEY or OPENROUTER_API_KEY to your secrets (or the clinical_chatbot/.env "
-            "file locally). Basic responses and safety checks still work, but full AI answers "
-            "need one of these keys."
+            "GEMINI_API_KEY, OPENROUTER_API_KEY or OPENAI_API_KEY to your secrets (or the "
+            "clinical_chatbot/.env file locally). Basic responses and safety checks still work, "
+            "but full AI answers need one of these keys."
         )
 
     pid, patient = _resolve_patient(cb)
